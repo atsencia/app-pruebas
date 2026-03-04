@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "My App",
+    "name": "Registro Vecinal",
     "slug": "my-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1E3A5F"
     },
     "ios": {
       "supportsTablet": false,
@@ -20,7 +20,7 @@
     "android": {
       "package": "com.myapp",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1E3A5F",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -37,7 +37,14 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Permite acceder a tu ubicación para georreferenciar el registro.",
+          "locationWhenInUsePermission": "Permite acceder a tu ubicación para georreferenciar el registro."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
