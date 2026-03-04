@@ -21,6 +21,8 @@ interface Registro {
   direccion: string;
   latitud: number | null;
   longitud: number | null;
+  fotosCount: number;
+  videosCount: number;
   firma: string | null;
   creadoEn: string;
   creadoPor: string;
@@ -84,7 +86,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/registros", requireAuth, (req: Request, res: Response) => {
-    const { nombre, cedula, direccion, latitud, longitud, firma } = req.body;
+    const { nombre, cedula, direccion, latitud, longitud, fotosCount, videosCount, firma } = req.body;
 
     if (!nombre || !cedula || !direccion) {
       return res
@@ -101,6 +103,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       direccion,
       latitud: latitud ?? null,
       longitud: longitud ?? null,
+      fotosCount: fotosCount ?? 0,
+      videosCount: videosCount ?? 0,
       firma: firma ?? null,
       creadoEn: new Date().toISOString(),
       creadoPor: req.session.userId!,
