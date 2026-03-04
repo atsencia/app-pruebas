@@ -1,11 +1,10 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import {
   View,
   PanResponder,
   StyleSheet,
   Pressable,
   Text,
-  Platform,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { Feather } from "@expo/vector-icons";
@@ -25,6 +24,7 @@ interface Props {
 export default function SignaturePad({ onSignatureChange }: Props) {
   const [paths, setPaths] = useState<string[]>([]);
   const currentPath = useRef<Point[]>([]);
+  const allPaths = useRef<string[]>([]);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   const pointsToPath = (points: Point[]): string => {
@@ -50,31 +50,26 @@ export default function SignaturePad({ onSignatureChange }: Props) {
       onPanResponderMove: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
         currentPath.current.push({ x: locationX, y: locationY });
-        setPaths((prev) => {
-          const updated = [...prev];
-          updated[updated.length] = pointsToPath(currentPath.current);
-          return updated;
-        });
+        const pathStr = pointsToPath(currentPath.current);
+        const preview = [...allPaths.current, pathStr];
+        setPaths(preview);
       },
       onPanResponderRelease: () => {
         const pathStr = pointsToPath(currentPath.current);
         if (pathStr) {
-          setPaths((prev) => {
-            const newPaths = [...prev, pathStr];
-            onSignatureChange(newPaths.join("|"));
-            return newPaths;
-          });
+          allPaths.current = [...allPaths.current, pathStr];
+          setPaths([...allPaths.current]);
         }
         currentPath.current = [];
       },
     })
   ).current;
 
-  const clearSignature = () => {
+  const clearSignature = useCallback(() => {
+    allPaths.current = [];
     setPaths([]);
-    currentPath.current = [];
     onSignatureChange(null);
-  };
+  }, [onSignatureChange]);
 
   const isEmpty = paths.length === 0;
 
@@ -89,6 +84,11 @@ export default function SignaturePad({ onSignatureChange }: Props) {
           })
         }
         {...panResponder.panHandlers}
+        onTouchEnd={() => {
+          if (allPaths.current.length > 0) {
+            onSignatureChange(allPaths.current.join("|"));
+          }
+        }}
       >
         {dimensions.width > 0 && (
           <Svg
@@ -112,9 +112,7 @@ export default function SignaturePad({ onSignatureChange }: Props) {
         {isEmpty && (
           <View style={styles.placeholder} pointerEvents="none">
             <Feather name="edit-3" size={22} color={C.textSecondary} />
-            <Text style={styles.placeholderText}>
-              Firme en este espacio
-            </Text>
+            <Text style={styles.placeholderText}>Firme en este espacio</Text>
           </View>
         )}
       </View>

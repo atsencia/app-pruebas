@@ -18,9 +18,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/query-client";
 import SignaturePad from "@/components/SignaturePad";
 import MapPicker from "@/components/MapPicker";
+import PhotoPickerSection from "@/components/PhotoPickerSection";
+import VideoPickerSection from "@/components/VideoPickerSection";
 import Colors from "@/constants/colors";
 
 const C = Colors.light;
+
+interface VideoItem {
+  uri: string;
+  thumbnail: string | null;
+  duration: number | null;
+  filename: string;
+}
 
 interface FormData {
   nombre: string;
@@ -28,6 +37,8 @@ interface FormData {
   direccion: string;
   latitud: number | null;
   longitud: number | null;
+  fotos: string[];
+  videos: VideoItem[];
   firma: string | null;
 }
 
@@ -47,6 +58,8 @@ export default function FormScreen() {
     direccion: "",
     latitud: null,
     longitud: null,
+    fotos: [],
+    videos: [],
     firma: null,
   });
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -82,7 +95,9 @@ export default function FormScreen() {
         direccion: form.direccion.trim(),
         latitud: form.latitud,
         longitud: form.longitud,
-        firma: form.firma,
+        fotosCount: form.fotos.length,
+        videosCount: form.videos.length,
+        firma: form.firma ? "captured" : null,
       });
       const data = await res.json();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -91,6 +106,8 @@ export default function FormScreen() {
         params: {
           numeroRegistro: data.numeroRegistro,
           nombre: form.nombre.trim(),
+          fotosCount: String(form.fotos.length),
+          videosCount: String(form.videos.length),
         },
       });
     } catch (e: any) {
@@ -204,6 +221,20 @@ export default function FormScreen() {
           />
         </Section>
 
+        <Section icon="camera" title="Fotografías">
+          <PhotoPickerSection
+            photos={form.fotos}
+            onPhotosChange={(fotos) => setForm((f) => ({ ...f, fotos }))}
+          />
+        </Section>
+
+        <Section icon="video" title="Videos">
+          <VideoPickerSection
+            videos={form.videos}
+            onVideosChange={(videos) => setForm((f) => ({ ...f, videos }))}
+          />
+        </Section>
+
         <Section icon="edit-2" title="Firma del Vecino">
           <SignaturePad
             onSignatureChange={(sig) =>
@@ -217,6 +248,45 @@ export default function FormScreen() {
             </View>
           )}
         </Section>
+
+        <View style={styles.summary}>
+          <SummaryItem
+            icon="user"
+            label="Nombre"
+            value={form.nombre.trim() || "—"}
+            filled={!!form.nombre.trim()}
+          />
+          <SummaryItem
+            icon="credit-card"
+            label="Cédula"
+            value={form.cedula.trim() || "—"}
+            filled={!!form.cedula.trim()}
+          />
+          <SummaryItem
+            icon="map-pin"
+            label="Ubicación"
+            value={form.latitud !== null ? "Capturada" : "Sin capturar"}
+            filled={form.latitud !== null}
+          />
+          <SummaryItem
+            icon="camera"
+            label="Fotos"
+            value={`${form.fotos.length} adjuntas`}
+            filled={form.fotos.length > 0}
+          />
+          <SummaryItem
+            icon="video"
+            label="Videos"
+            value={`${form.videos.length} adjuntos`}
+            filled={form.videos.length > 0}
+          />
+          <SummaryItem
+            icon="edit-2"
+            label="Firma"
+            value={form.firma ? "Capturada" : "Sin capturar"}
+            filled={!!form.firma}
+          />
+        </View>
 
         <Pressable
           style={({ pressed }) => [
@@ -282,6 +352,35 @@ function Field({
           <Text style={styles.fieldErrorText}>{error}</Text>
         </View>
       )}
+    </View>
+  );
+}
+
+function SummaryItem({
+  icon,
+  label,
+  value,
+  filled,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  filled: boolean;
+}) {
+  return (
+    <View style={styles.summaryItem}>
+      <Feather
+        name={icon}
+        size={13}
+        color={filled ? C.accent : C.textSecondary}
+      />
+      <Text style={styles.summaryLabel}>{label}:</Text>
+      <Text
+        style={[styles.summaryValue, filled && { color: C.text }]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
     </View>
   );
 }
@@ -409,6 +508,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_500Medium",
     color: C.accent,
+  },
+  summary: {
+    backgroundColor: C.card,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+    shadowColor: C.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  summaryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary,
+    width: 68,
+  },
+  summaryValue: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.textSecondary,
   },
   submitBtn: {
     flexDirection: "row",

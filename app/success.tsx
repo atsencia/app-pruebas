@@ -17,9 +17,11 @@ const C = Colors.light;
 
 export default function SuccessScreen() {
   const insets = useSafeAreaInsets();
-  const { numeroRegistro, nombre } = useLocalSearchParams<{
+  const { numeroRegistro, nombre, fotosCount, videosCount } = useLocalSearchParams<{
     numeroRegistro: string;
     nombre: string;
+    fotosCount: string;
+    videosCount: string;
   }>();
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -89,6 +91,21 @@ export default function SuccessScreen() {
                 year: "numeric",
               })}
             </Text>
+          </View>
+          <View style={styles.registerDivider} />
+          <View style={styles.mediaRow}>
+            <View style={styles.mediaBadge}>
+              <Feather name="camera" size={13} color={C.primary} />
+              <Text style={styles.mediaBadgeText}>
+                {fotosCount || "0"} foto{Number(fotosCount) !== 1 ? "s" : ""}
+              </Text>
+            </View>
+            <View style={styles.mediaBadge}>
+              <Feather name="video" size={13} color={C.primary} />
+              <Text style={styles.mediaBadgeText}>
+                {videosCount || "0"} video{Number(videosCount) !== 1 ? "s" : ""}
+              </Text>
+            </View>
           </View>
           <View style={styles.registerDivider} />
           <View style={styles.registroHint}>
@@ -224,6 +241,27 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: C.border,
     marginVertical: 8,
+  },
+  mediaRow: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "center",
+  },
+  mediaBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#EFF3F8",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  mediaBadgeText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: C.primary,
   },
   registroHint: {
     flexDirection: "row",
