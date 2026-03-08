@@ -10,6 +10,10 @@ build = ["sh", "-c", "npm run expo:static:build && npm run server:build"]
 run = ["npm", "run", "server:prod"]
 
 [[ports]]
+localPort = 2121
+externalPort = 3000
+
+[[ports]]
 localPort = 5000
 externalPort = 5000
 
