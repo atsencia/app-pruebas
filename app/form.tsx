@@ -10,6 +10,7 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { subirFormularioFTP } from "@/services/FtpuploadServices";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -202,34 +203,60 @@ export default function FormScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!validate()) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const hasMedia = form.fotos.length > 0 || form.videos.length > 0;
-      const data = hasMedia && Platform.OS !== "web"
-        ? await submitWithFiles()
-        : await submitJson();
+    console.log("Formulario a enviar:", buildDatos());
+  // if (!validate()) {
+  //   await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  //   return;
+  // }
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.push({
-        pathname: "/success",
-        params: {
-          numeroRegistro: data.numeroRegistro,
-          nombre: form.nombre.trim(),
-          fotosCount: String(form.fotos.length),
-          videosCount: String(form.videos.length),
+  setIsSubmitting(true);
+  try {
+    const resultado = await subirFormularioFTP(
+      {
+        // Campos de texto — mapeas los tuyos a los que espera el servicio
+        nombre   : form.nombre.trim(),
+        apellido : form.cedula.trim(),      // ← usas cédula como segundo campo
+        direccion: form.direccion.trim(),
+        georef   : {
+          latitud : form.latitud,
+          longitud: form.longitud,
         },
-      });
-    } catch (e: any) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", e.message || "No se pudo enviar el registro");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+        // Multimedia — el servicio espera Array de { uri }
+        fotos : form.fotos.map(uri => ({ uri })),
+        videos: form.videos.map(v  => ({ uri: v.uri })),
+
+        // Todos los demás campos del formulario van dentro
+        // del datos.json que arma FTPUploadService automáticamente
+        // pero puedes pasarlos como campos extra así:
+        extra: buildDatos(),   // ← reutilizas tu función existente
+
+      },  
+      // Callback de progreso (opcional)
+      (porcentaje: any, mensaje: any) => {
+        console.log(`[FTP] ${porcentaje}% — ${mensaje}`);
+      }
+    );
+
+    if (!resultado.success) throw new Error(resultado.mensaje);
+
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.push({
+      pathname: "/success",
+      params: {
+        numeroRegistro: resultado.id,
+        nombre        : form.nombre.trim(),
+        fotosCount    : String(form.fotos.length),
+        videosCount   : String(form.videos.length),
+      },
+    });
+
+  } catch (e: any) {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Alert.alert("Error", e.message || "No se pudo enviar el registro");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleLogout = async () => {
     await logout();
