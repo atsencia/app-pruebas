@@ -16,6 +16,7 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
+  loginLocal: (username: string) => void; // set user directly without network
   logout: () => Promise<void>;
 }
 
@@ -25,7 +26,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // credenciales integradas para use local
+  const LOCAL_CREDENTIALS = { username: "admin", password: "registro2024" };
+
   useEffect(() => {
+    // Si no quieres contacto con servidor, puedes omitir esta comprobación
     const fetchMe = getQueryFn<User | null>({ on401: "returnNull" });
     fetchMe({ queryKey: ["/api/auth/me"] } as any)
       .then((u) => setUser(u))
@@ -34,6 +39,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (username: string, password: string) => {
+    // primero intentar correspondencia local
+    if (
+      username === LOCAL_CREDENTIALS.username &&
+      password === LOCAL_CREDENTIALS.password
+    ) {
+      setUser({ username });
+      return;
+    }
+
+    // en caso de que quieras seguir usando el servidor remoto
     const res = await apiRequest("POST", "/api/auth/login", {
       username,
       password,
@@ -42,13 +57,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   };
 
+  const loginLocal = (username: string) => {
+    setUser({ username });
+  };
+
   const logout = async () => {
     await apiRequest("POST", "/api/auth/logout");
     setUser(null);
   };
 
   const value = useMemo(
-    () => ({ user, isLoading, login, logout }),
+    () => ({ user, isLoading, login, loginLocal, logout }),
     [user, isLoading]
   );
 

@@ -21,12 +21,15 @@ const C = Colors.light;
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { login, loginLocal } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // credenciales embebidas localmente (no se consultan al servidor)
+  const LOCAL_CREDENTIALS = { username: "admin", password: "registro2024" };
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -36,7 +39,18 @@ export default function LoginScreen() {
     setError("");
     setIsLoading(true);
     try {
-      await login(username.trim(), password);
+      // primero comprobación rápida local
+      if (
+        username.trim() === LOCAL_CREDENTIALS.username &&
+        password === LOCAL_CREDENTIALS.password
+      ) {
+        loginLocal(username.trim());
+      } else {
+        // si no coincide con las credenciales internas, se delega
+        // al método `login` (que puede hacer fetch o igualmente buscar
+        // en otra fuente según la implementación de AuthContext).
+        await login(username.trim(), password);
+      }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace("/form");
     } catch (e: any) {
