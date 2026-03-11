@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACTA DE VECINDAD – GCP-GESO-FO001</title>
+<style>
+:root {
+  --naranja:  #f4c07a;
+  --beige:    #fdf3e7;
+  --gris:     #f0f0f0;
+  --borde:    #999;
+  --texto:    #111;
+  --font:     Arial, Helvetica, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); font-size: 9.5pt; color: var(--texto); background: #ccc; line-height: 1.3; }
+
+#toolbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  background: #1c1c2e; color: #fff;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 20px; font-size: 11px; font-family: var(--font);
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+}
+#toolbar-status { color: #f4c07a; font-style: italic; margin-left: 12px; }
+.btn { padding: 5px 14px; border: none; cursor: pointer; font-family: var(--font); font-size: 11px; font-weight: bold; border-radius: 2px; margin-left: 8px; }
+.btn-print { background: #f4c07a; color: #111; }
+.btn-print:hover { background: #e0a850; }
+
+.hoja {
+  width: 215.9mm; min-height: 279.4mm;
+  margin: 60px auto 10px; background: #fff;
+  padding: 7mm 7mm 7mm 7mm;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+}
+
+table { border-collapse: collapse; width: 100%; }
+td, th { border: 1px solid var(--borde); padding: 2px 4px; vertical-align: middle; font-size: 8pt; }
+
+.center  { text-align: center; }
+.bold    { font-weight: bold; }
+.small   { font-size: 7.5pt; }
+.tiny    { font-size: 7pt; }
+.upper   { text-transform: uppercase; }
+.naranja { background: var(--naranja); font-weight: bold; text-transform: uppercase; text-align: center; }
+.gris    { background: var(--gris); }
+.beige   { background: var(--beige); font-style: italic; }
+.nb      { border: none !important; }
+
+.logo-wrap {
+  width: 100%; height: 16mm;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; overflow: hidden;
+}
+.logo-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; display: none; }
+.logo-hint { font-size: 6pt; color: #bbb; text-align: center; }
+.logo-input { display: none; }
+
+input[type="text"], textarea {
+  width: 100%; border: none; outline: none;
+  background: transparent; font-family: var(--font);
+  font-size: 8pt; color: var(--texto); padding: 0; resize: none;
+}
+textarea { overflow: hidden; }
+
+.foto-area {
+  background: #f5f5f5;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; overflow: hidden; position: relative;
+}
+.foto-area img { width: 100%; height: 100%; object-fit: cover; display: none; position: absolute; top:0; left:0; }
+.foto-hint { font-size: 6.5pt; color: #bbb; text-align: center; padding: 4px; z-index:1; }
+.foto-input { display: none; }
+
+.sec-title {
+  background: var(--naranja); font-weight: bold; text-transform: uppercase;
+  text-align: center; font-size: 8pt; padding: 3px 4px;
+  border: 1px solid var(--borde); margin-top: 3px;
+}
+.firma-h { background: var(--naranja); font-weight: bold; text-align: center; font-size: 7.5pt; text-transform: uppercase; }
+.fl { background: var(--gris); white-space: nowrap; font-size: 7pt; }
+
+@media print {
+  body { background: white; }
+  #toolbar { display: none !important; }
+  .hoja { margin: 0; padding: 8mm; box-shadow: none; width: 100%; }
+  .logo-hint, .foto-hint { display: none; }
+  input, textarea { color: black !important; }
+  @page { size: letter portrait; margin: 0; }
+}
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div>
+    <strong>ACTA DE VECINDAD</strong> · GCP-GESO-FO001
+    <span id="toolbar-status"></span>
+  </div>
+  <div>
+    <button class="btn btn-print" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+  </div>
+</div>
+
+<!-- ══════════ HOJA 1 ══════════ -->
+<div class="hoja">
+
+  <!-- CABECERA -->
+  <table>
+    <colgroup>
+      <col style="width:13%"><col style="width:12%"><col style="width:28%">
+      <col style="width:14%"><col style="width:14%"><col style="width:10%"><col style="width:9%">
+    </colgroup>
+    <tr>
+      <td rowspan="3" class="center" style="padding:2px">
+        <div class="logo-wrap" onclick="triggerLogo('l1')"><img id="l1-img" alt=""><div class="logo-hint">Logo<br>Sencia</div></div>
+        <input class="logo-input" type="file" id="l1" accept="image/*" onchange="loadLogo(this,'l1-img','l1b-img')">
+      </td>
+      <td colspan="2" rowspan="3" class="center bold upper" style="font-size:11pt;letter-spacing:.02em">ACTA DE VECINDAD</td>
+      <td colspan="2" class="center bold" style="font-size:8.5pt">GCP-GESO-FO001</td>
+      <td rowspan="3" class="center" style="padding:2px">
+        <div class="logo-wrap" onclick="triggerLogo('l3')"><img id="l3-img" alt=""><div class="logo-hint">Logo<br>IDRD</div></div>
+        <input class="logo-input" type="file" id="l3" accept="image/*" onchange="loadLogo(this,'l3-img','l3b-img')">
+      </td>
+      <td rowspan="3" class="center" style="padding:2px">
+        <div class="logo-wrap" onclick="triggerLogo('l4')"><img id="l4-img" alt=""><div class="logo-hint">Logo<br>CCA</div></div>
+        <input class="logo-input" type="file" id="l4" accept="image/*" onchange="loadLogo(this,'l4-img','l4b-img')">
+      </td>
+    </tr>
+    <tr>
+      <td class="small center">Fecha de Actualización:<br><strong>05/01/2026</strong></td>
+      <td class="small center" rowspan="2">Revisado por:<br>Yury Camila López Mazutier -<br>Líder de Entorno y Gestión Social</td>
+      <td class="small center" rowspan="2">Aprobado por:<br>Juan Llano – Director ESG &amp; Procurement</td>
+    </tr>
+    <tr>
+      <td class="small center">Rev. 01 | Página 1 de 2</td>
+    </tr>
+  </table>
+
+  <!-- NOTA -->
+  <table style="margin-top:3px">
+    <tr><td class="beige center small bold" style="padding:3px 6px">NOTA: EN LOS ESPACIOS QUE NO CORRESPONDA LLENAR, POR EL OBJETO DEL CONTRATO SE ESCRIBIRÁ "NA" – (NO APLICA)</td></tr>
+  </table>
+
+  <!-- FECHA / CONTRATO / ACTA No. -->
+  <table style="margin-top:3px">
+    <colgroup>
+      <col style="width:6%"><col style="width:5%"><col style="width:6%">
+      <col style="width:46%">
+      <col style="width:9%"><col style="width:9%"><col style="width:9%">
+      <col style="width:10%">
+    </colgroup>
+    <tr>
+      <td colspan="3" class="center gris bold small">FECHA</td>
+      <td rowspan="3" class="center small" style="padding:4px">
+        <div class="bold">CONTRATO DE CONCESIÓN BAJO EL ESQUEMA DE ASOCIACIÓN PÚBLICO PRIVADA No. IDRD-CTO-2772-2024</div>
+        <div style="margin-top:3px">CONTRATO DE INTERVENTORÍA N. IDRD-SG-3959-2024</div>
+      </td>
+      <td colspan="3" class="center gris bold small">ACTA No:</td>
+      <td class="gris"></td>
+    </tr>
+    <tr>
+      <td class="center tiny gris">dd</td><td class="center tiny gris">mm</td><td class="center tiny gris">aaaa</td>
+      <td class="center tiny gris">Inicio</td><td class="center tiny gris">Seguimiento</td><td class="center tiny gris">Cierre</td>
+      <td class="gris"></td>
+    </tr>
+    <tr>
+      <td class="center" style="height:8mm"><input type="text" id="fecha-dd" class="center"></td>
+      <td class="center"><input type="text" id="fecha-mm" class="center"></td>
+      <td class="center"><input type="text" id="fecha-yyyy" class="center"></td>
+      <td><input type="text" id="acta-inicio" class="center"></td>
+      <td><input type="text" id="acta-seg" class="center"></td>
+      <td><input type="text" id="acta-cierre" class="center"></td>
+      <td></td>
+    </tr>
+  </table>
+
+  <!-- SECCIONES 1 y 2 -->
+  <table style="margin-top:3px">
+    <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+    <tr>
+      <td class="naranja center">1. LOCALIZACIÓN</td>
+      <td class="naranja center">2. DATOS DEL PREDIO</td>
+    </tr>
+    <tr>
+      <!-- COL IZQ: foto fachada + localización -->
+      <td style="vertical-align:top;padding:0">
+        <div class="foto-area" style="height:40mm;border-bottom:1px solid var(--borde)" onclick="triggerFoto('ff')">
+          <img id="ff-img" alt="Fachada">
+          <div class="foto-hint">(vista principal fachada del predio según sea el caso)<br>se anexa registro fotográfico más amplio<br>Indicar el número de folios anexos: <input type="text" id="folios" style="width:18px;border-bottom:1px solid #aaa;display:inline-block"></div>
+        </div>
+        <input class="foto-input" type="file" id="ff" accept="image/*" onchange="loadFoto(this,'ff-img')">
+        <!-- Campos localización debajo de la foto -->
+        <table style="border:none">
+          <tr><td class="nb gris tiny" style="width:35%">Dirección:</td><td class="nb"><input type="text" id="loc-dir"></td></tr>
+          <tr><td class="nb gris tiny">Barrio:</td><td class="nb"><input type="text" id="loc-barrio"></td></tr>
+          <tr><td class="nb gris tiny">Localidad:</td><td class="nb"><input type="text" id="loc-loc"></td></tr>
+          <tr><td class="nb gris tiny">Coordenadas:</td><td class="nb"><input type="text" id="loc-coords"></td></tr>
+        </table>
+      </td>
+      <!-- COL DER: datos del predio -->
+      <td style="vertical-align:top;padding:0">
+        <table style="border:none">
+          <tr>
+            <td class="nb gris tiny" style="width:40%;white-space:nowrap">Nombre del Propietario/ arrendatario:</td>
+            <td class="nb" colspan="3"><input type="text" id="prop-nombre"></td>
+          </tr>
+          <tr>
+            <td class="nb gris tiny">No. de Cédula:</td>
+            <td class="nb" colspan="3"><input type="text" id="prop-cedula"></td>
+          </tr>
+          <tr>
+            <td class="nb gris tiny">Dirección:</td>
+            <td class="nb" colspan="3"><input type="text" id="prop-dir"></td>
+          </tr>
+          <tr>
+            <td class="nb gris tiny">Teléfono:</td>
+            <td class="nb"><input type="text" id="prop-tel"></td>
+            <td class="nb gris tiny" style="width:16%;white-space:nowrap">No Pisos:</td>
+            <td class="nb" style="width:18%"><input type="text" id="prop-pisos"></td>
+          </tr>
+          <tr>
+            <td class="nb gris tiny">Long. del Frente y de Fondo (mts):</td>
+            <td class="nb"><input type="text" id="prop-ff"></td>
+            <td class="nb gris tiny">Estrato:</td>
+            <td class="nb"><input type="text" id="prop-estrato"></td>
+          </tr>
+        </table>
+        <!-- Servicios públicos -->
+        <table style="border:none;margin-top:1px">
+          <tr><td colspan="4" class="naranja center tiny nb" style="padding:2px">SERVICIOS PÚBLICOS (estado en que se encuentran)</td></tr>
+          <tr>
+            <td class="nb gris tiny" style="width:18%">Agua:</td><td class="nb" style="width:32%"><input type="text" id="sv-agua"></td>
+            <td class="nb gris tiny" style="width:18%">Alcantarillado:</td><td class="nb"><input type="text" id="sv-alc"></td>
+          </tr>
+          <tr>
+            <td class="nb gris tiny">Energía:</td><td class="nb"><input type="text" id="sv-ene"></td>
+            <td class="nb gris tiny">Teléfono:</td><td class="nb"><input type="text" id="sv-tel"></td>
+          </tr>
+          <tr>
+            <td class="nb gris tiny">Gas:</td><td class="nb"><input type="text" id="sv-gas"></td>
+            <td class="nb gris tiny">Otros:</td><td class="nb"><input type="text" id="sv-otros"></td>
+          </tr>
+        </table>
+        <!-- Uso actual + Acceso vehicular -->
+        <table style="border:none;margin-top:1px">
+          <colgroup>
+            <col style="width:36%"><col style="width:14%">
+            <col style="width:36%"><col style="width:14%">
+          </colgroup>
+          <tr>
+            <td colspan="2" class="naranja center tiny nb" style="padding:2px">USO ACTUAL</td>
+            <td colspan="2" class="naranja center tiny nb" style="padding:2px">ACCESO VEHICULAR</td>
+          </tr>
+          <tr><td class="nb gris tiny">Residencial:</td><td class="nb"><input type="text" id="uso-res"></td><td class="nb gris tiny">Garaje:</td><td class="nb"><input type="text" id="veh-gar"></td></tr>
+          <tr><td class="nb gris tiny">Comercial:</td><td class="nb"><input type="text" id="uso-com"></td><td class="nb gris tiny">Cuántos:</td><td class="nb"><input type="text" id="veh-cuant"></td></tr>
+          <tr><td class="nb gris tiny">Industrial:</td><td class="nb"><input type="text" id="uso-ind"></td><td class="nb gris tiny">Se usa como:</td><td class="nb"><input type="text" id="veh-uso"></td></tr>
+          <tr><td class="nb gris tiny">Institucional:</td><td class="nb"><input type="text" id="uso-inst"></td><td class="nb gris tiny">Comercial:</td><td class="nb"><input type="text" id="veh-com"></td></tr>
+          <tr><td class="nb gris tiny">Recreacional:</td><td class="nb"><input type="text" id="uso-rec"></td><td class="nb gris tiny">Residencial:</td><td class="nb"><input type="text" id="veh-res"></td></tr>
+          <tr><td class="nb gris tiny">Baldío:</td><td class="nb"><input type="text" id="uso-bal"></td><td class="nb gris tiny">Ancho de acceso vehicular:</td><td class="nb"><input type="text" id="veh-ancho"></td></tr>
+          <tr><td class="nb gris tiny">Bien de interés Cultural:</td><td class="nb"><input type="text" id="uso-bic"></td><td class="nb"></td><td class="nb"></td></tr>
+          <tr><td class="nb gris tiny">Mixto:</td><td class="nb"><input type="text" id="uso-mix"></td><td class="nb"></td><td class="nb"></td></tr>
+          <tr><td class="nb gris tiny">Otro: ¿cuál?</td><td class="nb" colspan="3"><input type="text" id="uso-otro"></td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- SECCIÓN 3 -->
+  <div class="sec-title">3. DESCRIPCIÓN Y ESTADO DEL PREDIO ANTES DE INICIO DE LA INTERVENCIÓN PROYECTADA</div>
+  <table>
+    <tr>
+      <td class="beige small" style="padding:4px 6px;line-height:1.5">
+        El levantamiento del Acta de Vecindad No. <input type="text" id="acta-ref" style="width:36px;border-bottom:1px solid #aaa;display:inline-block"> se llevó a cabo bajo los principios de buena fe y transparencia, confiando en la disposición y colaboración del residente o propietario que atendió la visita. En virtud de dichos principios, se estableció una relación de confianza mutua, en la cual se presume que la información suministrada fue veraz, completa, suficiente y oportuna, y que las condiciones observadas y registradas, tanto de manera descriptiva como a través de los registros fotográficos y audiovisuales, corresponden fielmente a la realidad física y estructural del inmueble al momento de la visita.
+        <br><br>
+        En tal sentido, el Acta de Vecindad, junto con sus anexos técnicos, incluidos fotografías y videos, hace parte integral e indivisible del documento, constituyéndose en soporte técnico, contractual y probatorio suficiente, con plena validez para efectos de verificación, seguimiento, comparación posterior y análisis de eventuales reclamaciones, de conformidad con las obligaciones contractuales y los lineamientos técnicos aplicables.
+      </td>
+    </tr>
+    <tr><td class="center tiny gris" style="padding:3px">(Especificar de manera descriptiva, técnica y completa el estado observado del predio)</td></tr>
+    <tr><td style="height:7mm"><input type="text" id="d1"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="d2"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="d3"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="d4"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="d5"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="d6"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="d7"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="d8"></td></tr>
+  </table>
+
+  <!-- SECCIÓN 4 -->
+  <div class="sec-title">4. OTRAS OBSERVACIONES:</div>
+  <table>
+    <tr><td style="height:7mm"><input type="text" id="obs1"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="obs2"></td></tr>
+    <tr><td style="height:7mm"><input type="text" id="obs3"></td></tr>
+  </table>
+
+</div><!-- /hoja 1 -->
+
+
+<!-- ══════════ HOJA 2 ══════════ -->
+<div class="hoja" style="margin-top:10px">
+
+  <!-- CABECERA PÁG 2 -->
+  <table>
+    <colgroup><col style="width:13%"><col style="width:55%"><col style="width:19%"><col style="width:13%"></colgroup>
+    <tr>
+      <td class="center" style="padding:2px">
+        <div class="logo-wrap" style="height:14mm" onclick="triggerLogo('l1')">
+          <img id="l1b-img" alt=""><div class="logo-hint">Logo Sencia</div>
+        </div>
+      </td>
+      <td class="center" style="vertical-align:middle">
+        <div class="bold upper" style="font-size:10pt">ACTA DE VECINDAD</div>
+        <div class="tiny" style="margin-top:2px">Revisado por: Yury Camila López Mazutier - Líder de Entorno y Gestión Social &nbsp;&nbsp; Aprobado por: Juan Llano – Director ESG &amp; Procurement</div>
+      </td>
+      <td class="center small">
+        <div class="bold">GCP-GESO-FO001</div>
+        <div>Fecha Actualización: 05/01/2026</div>
+        <div>Rev. 01 | Página 2 de 2</div>
+      </td>
+      <td class="center" style="padding:2px">
+        <div class="logo-wrap" style="height:14mm" onclick="triggerLogo('l4')">
+          <img id="l4b-img" alt=""><div class="logo-hint">Logo CCA</div>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <!-- SECCIÓN 5: REGISTRO FOTOGRÁFICO -->
+  <div class="sec-title" style="margin-top:4px">5. REGISTRO FOTOGRÁFICO</div>
+  <table style="margin-top:0">
+    <!-- Fotos 1 y 2 -->
+    <tr>
+      <td style="width:50%;padding:0;vertical-align:top">
+        <table style="border:none">
+          <colgroup><col style="width:65%"><col style="width:35%"></colgroup>
+          <tr>
+            <td style="padding:0;border-right:1px solid var(--borde)">
+              <div class="foto-area" style="height:54mm" onclick="triggerFoto('f1')">
+                <img id="f1-img" alt="Foto 1"><div class="foto-hint">📷 Foto 1</div>
+              </div>
+              <input class="foto-input" type="file" id="f1" accept="image/*" onchange="loadFoto(this,'f1-img')">
+            </td>
+            <td style="padding:3px;vertical-align:top">
+              <div style="font-size:7pt;font-weight:bold;background:var(--gris);padding:2px">Descripción de la Fotografía:</div>
+              <textarea id="f1-desc" style="height:50mm;font-size:7.5pt;padding:2px"></textarea>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td style="width:50%;padding:0;vertical-align:top;border-left:1px solid var(--borde)">
+        <table style="border:none">
+          <colgroup><col style="width:65%"><col style="width:35%"></colgroup>
+          <tr>
+            <td style="padding:0;border-right:1px solid var(--borde)">
+              <div class="foto-area" style="height:54mm" onclick="triggerFoto('f2')">
+                <img id="f2-img" alt="Foto 2"><div class="foto-hint">📷 Foto 2</div>
+              </div>
+              <input class="foto-input" type="file" id="f2" accept="image/*" onchange="loadFoto(this,'f2-img')">
+            </td>
+            <td style="padding:3px;vertical-align:top">
+              <div style="font-size:7pt;font-weight:bold;background:var(--gris);padding:2px">Descripción de la Fotografía:</div>
+              <textarea id="f2-desc" style="height:50mm;font-size:7.5pt;padding:2px"></textarea>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <!-- Fotos 3 y 4 -->
+    <tr>
+      <td style="width:50%;padding:0;vertical-align:top;border-top:1px solid var(--borde)">
+        <table style="border:none">
+          <colgroup><col style="width:65%"><col style="width:35%"></colgroup>
+          <tr>
+            <td style="padding:0;border-right:1px solid var(--borde)">
+              <div class="foto-area" style="height:54mm" onclick="triggerFoto('f3')">
+                <img id="f3-img" alt="Foto 3"><div class="foto-hint">📷 Foto 3</div>
+              </div>
+              <input class="foto-input" type="file" id="f3" accept="image/*" onchange="loadFoto(this,'f3-img')">
+            </td>
+            <td style="padding:3px;vertical-align:top">
+              <div style="font-size:7pt;font-weight:bold;background:var(--gris);padding:2px">Descripción de la Fotografía:</div>
+              <textarea id="f3-desc" style="height:50mm;font-size:7.5pt;padding:2px"></textarea>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td style="width:50%;padding:0;vertical-align:top;border-top:1px solid var(--borde);border-left:1px solid var(--borde)">
+        <table style="border:none">
+          <colgroup><col style="width:65%"><col style="width:35%"></colgroup>
+          <tr>
+            <td style="padding:0;border-right:1px solid var(--borde)">
+              <div class="foto-area" style="height:54mm" onclick="triggerFoto('f4')">
+                <img id="f4-img" alt="Foto 4"><div class="foto-hint">📷 Foto 4</div>
+              </div>
+              <input class="foto-input" type="file" id="f4" accept="image/*" onchange="loadFoto(this,'f4-img')">
+            </td>
+            <td style="padding:3px;vertical-align:top">
+              <div style="font-size:7pt;font-weight:bold;background:var(--gris);padding:2px">Descripción de la Fotografía:</div>
+              <textarea id="f4-desc" style="height:50mm;font-size:7.5pt;padding:2px"></textarea>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+  <table style="margin-top:2px">
+    <tr><td class="tiny center" style="padding:3px">(Observaciones: Informar registro fotográfico y fílmico adicional con detalles del predio, Indicar el número de archivos y/o folios anexos <input type="text" id="folios2" style="width:28px;border-bottom:1px solid #aaa;display:inline-block">)</td></tr>
+  </table>
+
+  <!-- SECCIÓN 6: FIRMAS -->
+  <div class="sec-title" style="margin-top:4px">6. FIRMAS</div>
+  <table>
+    <tr>
+      <td colspan="2" class="small" style="padding:4px 6px">
+        Para constancia de lo anterior, se firma la presente acta bajo la responsabilidad expresa de los que intervienen en ella. Vigente en la fecha del presente periodo de reporte, en Bogotá D.C., a los
+        <input type="text" id="sd" style="width:22px;border-bottom:1px solid #aaa;display:inline-block;text-align:center">
+        días del mes de
+        <input type="text" id="sm" style="width:65px;border-bottom:1px solid #aaa;display:inline-block;text-align:center">
+        del año 202<input type="text" id="sa" style="width:18px;border-bottom:1px solid #aaa;display:inline-block">
+      </td>
+    </tr>
+  </table>
+  <table style="margin-top:2px">
+    <colgroup><col style="width:50%"><col style="width:50%"></colgroup>
+    <tr>
+      <td class="firma-h">PROPIETARIO O AUTORIZADO</td>
+      <td class="firma-h">REPRESENTANTE DELEGADO CONCESIONARIO SENCIA S.A.S.</td>
+    </tr>
+    <tr>
+      <td style="vertical-align:top;padding:0">
+        <table style="border:none">
+          <tr><td class="nb fl" style="width:54%">Nombre Completo y Apellidos Propietario o Autorizado / Razón Social:</td><td class="nb"><input type="text" id="fp-nom"></td></tr>
+          <tr><td class="nb fl">Firma:</td><td class="nb" style="height:11mm"></td></tr>
+          <tr><td class="nb fl">CC o NIT:</td><td class="nb"><input type="text" id="fp-cc"></td></tr>
+          <tr><td class="nb fl">Teléfono:</td><td class="nb"><input type="text" id="fp-tel"></td></tr>
+          <tr><td class="nb fl">Dirección:</td><td class="nb"><input type="text" id="fp-dir"></td></tr>
+        </table>
+      </td>
+      <td style="vertical-align:top;padding:0;border-left:1px solid var(--borde)">
+        <table style="border:none">
+          <tr><td class="nb fl" style="width:44%">Nombre Completo y Apellidos:</td><td class="nb"><input type="text" id="fs-nom"></td></tr>
+          <tr><td class="nb fl">Firma:</td><td class="nb" style="height:11mm"></td></tr>
+          <tr><td class="nb fl">CC o Ni:</td><td class="nb"><input type="text" id="fs-cc"></td></tr>
+          <tr><td class="nb fl">Cargo:</td><td class="nb"><input type="text" id="fs-cargo"></td></tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td class="firma-h">PROFESIONAL TÉCNICO</td>
+      <td class="firma-h">REPRESENTANTE DELEGADO INTERVENTORÍA</td>
+    </tr>
+    <tr>
+      <td style="vertical-align:top;padding:0">
+        <table style="border:none">
+          <tr><td class="nb fl" style="width:44%">Nombre Completo y Apellidos:</td><td class="nb"><input type="text" id="ft-nom"></td></tr>
+          <tr><td class="nb fl">Firma:</td><td class="nb" style="height:11mm"></td></tr>
+          <tr><td class="nb fl">CC o Ni:</td><td class="nb"><input type="text" id="ft-cc"></td></tr>
+          <tr><td class="nb fl">Cargo:</td><td class="nb"><input type="text" id="ft-cargo"></td></tr>
+        </table>
+      </td>
+      <td style="vertical-align:top;padding:0;border-left:1px solid var(--borde)">
+        <table style="border:none">
+          <tr><td class="nb fl" style="width:44%">Nombre Completo y Apellidos:</td><td class="nb"><input type="text" id="fi-nom"></td></tr>
+          <tr><td class="nb fl">Firma:</td><td class="nb" style="height:11mm"></td></tr>
+          <tr><td class="nb fl">CC o Ni:</td><td class="nb"><input type="text" id="fi-cc"></td></tr>
+          <tr><td class="nb fl">Cargo:</td><td class="nb"><input type="text" id="fi-cargo"></td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Aviso datos personales -->
+  <table style="margin-top:3px">
+    <tr>
+      <td class="tiny" style="padding:4px 6px;line-height:1.45;color:#333">
+        En cumplimiento de lo dispuesto en la Ley 1581 de 2012, el Decreto 1377 de 2013, sus decretos reglamentarios y la Circular Única de la Superintendencia de Industria y Comercio, autorizo de manera libre, expresa, voluntaria e informada a SENCIA S.A.S identificada con el NI 901.797.947-8 para que en calidad de responsable pueda recolectar, almacenar, usar, circular y suprimir los datos personales aquí suministrados, incluyendo los datos de identificación y la grabación audiovisual de la reunión, con la finalidad de registrar mi asistencia a la reunión, conservar evidencia de los temas tratados, decisiones y acuerdos alcanzados, así como para fines administrativos, de control interno o cualquier otro tema requerido por Concesionario Sencia SAS. Manifiesto que las respuestas a las preguntas sobre datos personales sensibles las suministro de manera libre y voluntaria. En mi calidad de titular de la información podré ejercer mis derechos de conocer, actualizar, rectificar o suprimir mis datos personales, y revocar la autorización otorgada, mediante comunicación escrita dirigida al correo electrónico "<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="a7c6d3c2c9c4cec8c9c6cbd2d4d2c6d5cec8e7d4c2c9c4cec689c4c8ca89c4c8">[email&#160;protected]</a>".
+      </td>
+    </tr>
+  </table>
+
+</div><!-- /hoja 2 -->
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+const API_BASE = "";  // vacío = misma IP y puerto que sirve este HTML
+
+window.addEventListener("DOMContentLoaded", async () => {
+  // Fecha de hoy siempre
+  const h = new Date();
+  set("fecha-dd",   String(h.getDate()).padStart(2,"0"));
+  set("fecha-mm",   String(h.getMonth()+1).padStart(2,"0"));
+  set("fecha-yyyy", h.getFullYear());
+
+  const cedula = new URLSearchParams(window.location.search).get("cedula");
+  if (!cedula) {
+    status("⚠ Indica la cédula en la URL: /acta?cedula=123456789");
+    return;
+  }
+
+  status("Cargando registro…");
+  try {
+    const res = await fetch(`${API_BASE}/registro/${cedula}`);
+    if (res.status === 404) { status("⚠ No se encontró un registro para esa cédula"); return; }
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    llenar(await res.json());
+    status("");
+  } catch(e) { status("⚠ " + e.message); }
+});
+
+function llenar(r) {
+  document.title = `Acta de Vecindad #${r.id}`;
+
+  // ── Acta No. ──
+  set("acta-inicio", r.id ?? "");
+  set("acta-ref",    r.id ?? "");
+
+  // ── Sección 1: Localización ──
+  set("loc-dir",    r.direccion ?? "");
+  set("loc-coords", coords(r));
+  // barrio y localidad no están en la tabla → se llenan a mano
+
+  // ── Sección 2: Datos del predio ──
+  // nombre + apellido (apellido es cédula temporalmente)
+  const nombreCompleto = [r.nombre, r.apellido].filter(Boolean).join(" ");
+  set("prop-nombre", nombreCompleto);
+  set("prop-cedula", r.cedula  ?? r.apellido ?? "");  // cedula si existe, si no apellido
+  set("prop-dir",    r.direccion ?? "");
+  set("prop-pisos",  r.numero_niveles ?? "");
+  // teléfono, estrato, frente/fondo → no están en la tabla, se llenan a mano
+
+  // ── Uso actual: tipo_edificacion → marca el campo correcto ──
+  const tipoMap = {
+    "vivienda":  "uso-res",
+    "comercial": "uso-com",
+    "mixta":     "uso-mix",
+  };
+  const campoUso = tipoMap[(r.tipo_edificacion ?? "").toLowerCase()];
+  if (campoUso) set(campoUso, "X");
+
+  // ── Sección 3: Descripción técnica ──
+  // Campos BOOLEAN: 1/0 → "Sí" / "No"
+  const bool = v => v == null ? "No registrado" : (v ? "Sí" : "No");
+
+  const lineas = [
+    r.tipo_edificacion    && `Tipo de edificación: ${r.tipo_edificacion}`,
+    r.numero_niveles      && `Número de niveles: ${r.numero_niveles}`,
+    r.anio_construccion   && `Año de construcción: ${r.anio_construccion}`,
+    r.esta_ocupada   != null && `Edificación ocupada: ${bool(r.esta_ocupada)}`,
+    r.estado_fachada      && `Estado de fachada: ${r.estado_fachada}`,
+    r.fisuras_cerradas != null && `Fisuras cerradas: ${bool(r.fisuras_cerradas)}`,
+    r.fisuras_abiertas != null && `Fisuras abiertas: ${bool(r.fisuras_abiertas)}`,
+    r.grietas          != null && `Grietas: ${bool(r.grietas)}`,
+    r.acabados_pisos      && `Acabados / pisos: ${r.acabados_pisos}`,
+    r.verticalidad     != null && `Verticalidad: ${bool(r.verticalidad)}`,
+    r.verticalidad_notas  && `Notas verticalidad: ${r.verticalidad_notas}`,
+    r.plan_topografico != null && `Plan topográfico: ${bool(r.plan_topografico)}`,
+  ].filter(Boolean);
+  lineas.forEach((txt, i) => set(`d${i+1}`, txt));
+
+  // ── Sección 4: Otras observaciones ──
+  set("obs1", r.observaciones_profesional ?? "");
+
+  // ── Firmas: nombre del profesional que registró ──
+  set("ft-nom", [r.nombre, r.apellido].filter(Boolean).join(" "));
+
+  // ── Sección 5: Fotos ──
+  // Si la ruta es una URL accesible, carga la imagen; si no, muestra la ruta como descripción
+  (r.fotos ?? []).slice(0, 4).forEach((f, i) => {
+    const n = i + 1;
+    set(`f${n}-desc`, f.ruta_archivo ?? "");
+    if (esURL(f.ruta_archivo)) loadFotoURL(`f${n}-img`, f.ruta_archivo);
+  });
+}
+
+// ── helpers ──
+function set(id, val) { const el = document.getElementById(id); if (el) el.value = val ?? ""; }
+function status(msg)  { document.getElementById("toolbar-status").textContent = msg; }
+function coords(r)    { return (r.latitud != null && r.longitud != null) ? `${r.latitud}, ${r.longitud}` : ""; }
+function esURL(s)     { try { return s && ["http","https","/"].some(p => s.startsWith(p)); } catch{ return false; } }
+
+function loadFotoURL(imgId, url) {
+  const img = document.getElementById(imgId);
+  if (!img) return;
+  img.src = url; img.style.display = "block";
+  const hint = img.closest(".foto-area")?.querySelector(".foto-hint");
+  if (hint) hint.style.display = "none";
+}
+
+// Logos – sincroniza pág 1 y pág 2
+function triggerLogo(id) { document.getElementById(id)?.click(); }
+function loadLogo(input, img1, img2) {
+  const f = input.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    [img1, img2].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.src = e.target.result; el.style.display = "block";
+      el.closest(".logo-wrap")?.querySelector(".logo-hint")?.remove();
+    });
+  };
+  r.readAsDataURL(f);
+}
+
+// Fotos manuales
+function triggerFoto(id) { document.getElementByI
