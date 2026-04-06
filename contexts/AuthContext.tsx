@@ -31,11 +31,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Si no quieres contacto con servidor, puedes omitir esta comprobación
-    const fetchMe = getQueryFn<User | null>({ on401: "returnNull" });
-    fetchMe({ queryKey: ["/api/auth/me"] } as any)
-      .then((u) => setUser(u))
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
+    const checkAuth = async () => {
+      try {
+        const res = await apiRequest("GET", "/api/auth/me");
+        const data = await res.json();
+        setUser(data);
+      } catch (error) {
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
   }, []);
 
   const login = async (username: string, password: string) => {
