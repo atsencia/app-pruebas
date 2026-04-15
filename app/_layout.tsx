@@ -23,6 +23,8 @@ function RootLayoutNav() {
       <Stack.Screen name="index" />
       <Stack.Screen name="login" />
       <Stack.Screen name="form" />
+      <Stack.Screen name="search" />
+      <Stack.Screen name="createUser" />
       <Stack.Screen name="success" />
     </Stack>
   );
