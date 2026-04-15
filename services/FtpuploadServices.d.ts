@@ -3,8 +3,9 @@ export interface FTPFormulario {
   apellido: string;
   direccion: string;
   georef?: { latitud?: number | null; longitud?: number | null };
-  fotos?: Array<{ uri: string; nombre?: string }>;
-  videos?: Array<{ uri: string; nombre?: string }>;
+  fotos?: Array<{ uri: string; nombre?: string; descripcion?: string }>;
+  fotosFachada?: Array<{ uri: string; nombre?: string; descripcion?: string }>;
+  videos?: Array<{ uri: string; nombre?: string; descripcion?: string }>;
   // campos arbitrarios que se mezclarán en datos.json
   extra?: Record<string, any>;
 }

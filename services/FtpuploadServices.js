@@ -1,251 +1,232 @@
-// ============================================================
 // services/FTPUploadService.js
-// ============================================================
-// Servicio de alto nivel que usa FTPClient para subir
-// los datos del formulario empaquetados en un archivo JSON.
-//
-// FLUJO COMPLETO:
-//   1. Tomar los datos del formulario
-//   2. Generar un nombre de archivo único (sin duplicados)
-//   3. Empaquetar todo en un JSON
-//   4. Subir el JSON al servidor FTP
-//   5. Subir cada foto/video como archivo separado
-//   6. Tras confirmación del servidor → borrar archivos locales
-// ============================================================
-
 import * as FileSystem from 'expo-file-system';
 import FTPClient from './FTPClient';
 
-// ── CONFIGURACIÓN ─────────────────────────────────────────
-// ⚠️  Mueve estas variables a un .env en producción.
-//     npm install react-native-dotenv  y  babel-plugin-module-resolver
 const FTP_CONFIG = {
-  host    : '187.33.154.112',   // ← cambia esto
-  port    : 21,
-  user    : 'ftpuser',            // ← cambia esto
-  password: 'Sencia2026AT',         // ← cambia esto
-  baseDir : '/home/ftpuser/uploads',          // Carpeta raíz en el servidor FTP
+  host: '187.33.154.112',
+  port: 21,
+  user: 'ftpuser',
+  password: 'Sencia2026AT',
+  baseDir: '/home/ftpuser/uploads',
 };
 
-// ── Helpers ──────────────────────────────────────────────
-
-/**
- * Genera un ID único para el registro basado en timestamp + random.
- * Esto evita duplicados incluso si dos dispositivos suben a la vez.
- * Formato: YYYYMMDD_HHMMSS_XXXX
- */
 function generarIDUnico() {
   const ahora  = new Date();
-  const fecha  = ahora.toISOString().replace(/[-:T]/g, '').substring(0, 15);
+  const fecha  = ahora.toISOString().replace(/[-:T.]/g, '').substring(0, 15);
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `${fecha}_${random}`;
 }
 
 /**
- * Lee un archivo local y lo devuelve como base64.
- * Necesario para enviar binarios (fotos/videos) por FTP.
+ * Deduce la extensión real de una URI local.
+ * Fallback: jpg para fotos, mp4 para videos.
  */
-async function leerArchivoComoBase64(uri) {
-  const contenido = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
+function extDeURI(uri, fallback = 'jpg') {
+  const match = uri.match(/\.([a-zA-Z0-9]+)(?:\?|$)/);
+  return match ? match[1].toLowerCase() : fallback;
+}
+
+/**
+ * Construye la lista de archivos multimedia asignando nombres únicos
+ * y sin colisiones entre categorías.
+ *
+ * Convención de nombres:
+ *   foto_001.jpg       — fotos generales
+ *   fachada_001.jpg    — fotos de fachada
+ *   firma_conc_001.jpg — firma concesionario
+ *   firma_prof_001.jpg — firma profesional
+ *   video_001.mp4      — videos
+ *
+ * Retorna un array de objetos:
+ *   { uriLocal, nombreRemoto, categoria, descripcion }
+ */
+function construirListaMultimedia(formulario) {
+  const lista = [];
+
+  // ── Fotos generales ──────────────────────────────────────
+  (formulario.fotos || []).forEach((f, i) => {
+    const ext = extDeURI(f.uri, 'jpg');
+    lista.push({
+      uriLocal:     f.uri,
+      nombreRemoto: `foto_${String(i + 1).padStart(3, '0')}.${ext}`,
+      categoria:    'fotos',
+      descripcion:  f.descripcion || `Foto ${i + 1}`,
+    });
   });
-  return contenido;
-}
 
-/**
- * Borra un archivo local de forma segura.
- */
-async function borrarArchivoLocal(uri) {
-  try {
-    const info = await FileSystem.getInfoAsync(uri);
-    if (info.exists) {
-      await FileSystem.deleteAsync(uri, { idempotent: true });
-      console.log('[FTPUpload] Borrado local:', uri);
-    }
-  } catch (e) {
-    console.warn('[FTPUpload] No se pudo borrar:', uri, e.message);
+  // ── Fotos de fachada ─────────────────────────────────────
+  (formulario.fotosFachada || []).forEach((f, i) => {
+    const ext = extDeURI(f.uri, 'jpg');
+    lista.push({
+      uriLocal:     f.uri,
+      nombreRemoto: `fachada_${String(i + 1).padStart(3, '0')}.${ext}`,
+      categoria:    'fotosFachada',
+      descripcion:  f.descripcion || `Fachada ${i + 1}`,
+    });
+  });
+
+  // ── Firma concesionario (si vino como URI, no como base64) ─
+  const firmaConcUri = formulario.extra?.firmaConcesionario?.firma;
+  if (firmaConcUri && firmaConcUri.startsWith('file://')) {
+    const ext = extDeURI(firmaConcUri, 'png');
+    lista.push({
+      uriLocal:     firmaConcUri,
+      nombreRemoto: `firma_concesionario.${ext}`,
+      categoria:    'firmas',
+      descripcion:  'Firma del representante delegado concesionario',
+    });
   }
+
+  // ── Firma profesional (si vino como URI, no como base64) ───
+  const firmaProfUri = formulario.extra?.firmaProfesional?.firma;
+  if (firmaProfUri && firmaProfUri.startsWith('file://')) {
+    const ext = extDeURI(firmaProfUri, 'png');
+    lista.push({
+      uriLocal:     firmaProfUri,
+      nombreRemoto: `firma_profesional.${ext}`,
+      categoria:    'firmas',
+      descripcion:  'Firma del profesional técnico',
+    });
+  }
+
+  // ── Videos ───────────────────────────────────────────────
+  (formulario.videos || []).forEach((v, i) => {
+    const ext = extDeURI(v.uri, 'mp4');
+    lista.push({
+      uriLocal:     v.uri,
+      nombreRemoto: `video_${String(i + 1).padStart(3, '0')}.${ext}`,
+      categoria:    'videos',
+      descripcion:  v.descripcion || `Video ${i + 1}`,
+    });
+  });
+
+  return lista;
 }
 
-
-// ── FUNCIÓN PRINCIPAL ─────────────────────────────────────
-
 /**
- * Empaqueta y sube un formulario completo al servidor FTP.
- *
- * Estructura de archivos en el servidor:
- *   /formularios/
- *     └── 20260308_143022_AB3C/          ← carpeta por registro
- *           ├── datos.json               ← campos del formulario
- *           ├── foto_1.jpg
- *           ├── foto_2.jpg
- *           └── video_1.mp4
- *
- * El script en el servidor (ver proceso_registros.py) detecta
- * la carpeta nueva, lee datos.json y sube a la DB.
- *
- * @param {Object}   formulario           - Datos del formulario
- * @param {string}   formulario.nombre
- * @param {string}   formulario.apellido
- * @param {string}   formulario.direccion
- * @param {Object}   formulario.georef    - { latitud, longitud }
- * @param {Array}    formulario.fotos     - [{ uri, nombre }]
- * @param {Array}    formulario.videos    - [{ uri, nombre }]
- * @param {Object}  [formulario.extra]    - Propiedades adicionales que serán fusionadas
- *                                         dentro de `datos.json` (por ejemplo, el
- *                                         objeto completo de `buildDatos`).
- * @param {Function} onProgreso           - Callback(porcentaje, mensaje)
- *
- * @returns {Promise<{ success: boolean, id: string, mensaje: string }>}
+ * Construye el JSON del registro.
+ * Las firmas se referencian por nombre de archivo si son URI,
+ * o se incluyen inline como base64 si son strings cortos (firma dibujada).
  */
+function construirDatosJSON(id, formulario, listaMultimedia) {
+  const extra = formulario.extra || {};
+
+  // Resolver referencia de firma: URI → nombreRemoto; base64/null → tal cual
+  const resolverFirma = (firmaRaw, nombreArchivo) => {
+    if (!firmaRaw) return null;
+    if (firmaRaw.startsWith('file://')) return nombreArchivo; // referencia al archivo subido
+    return firmaRaw; // base64 inline (firma dibujada en pantalla)
+  };
+
+  const firmaConcNombre = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_concesionario'))?.nombreRemoto ?? null;
+  const firmaProfNombre = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_profesional'))?.nombreRemoto ?? null;
+
+  // Agrupar multimedia por categoría para la sección "multimedia" del JSON
+  const agrupar = (cat) =>
+    listaMultimedia
+      .filter(a => a.categoria === cat)
+      .map(a => ({ archivo: a.nombreRemoto, descripcion: a.descripcion }));
+
+  return {
+    id,
+    version:    '1.0',
+    timestamp:  new Date().toISOString(),
+    dispositivo: {
+      plataforma: require('react-native').Platform.OS,
+    },
+    formulario: {
+      ...extra,
+
+      // Sobrescribir firmas con referencia correcta (archivo o base64)
+      firmaConcesionario: {
+        ...extra.firmaConcesionario,
+        firma: resolverFirma(extra.firmaConcesionario?.firma, firmaConcNombre),
+      },
+      firmaProfesional: {
+        ...extra.firmaProfesional,
+        firma: resolverFirma(extra.firmaProfesional?.firma, firmaProfNombre),
+      },
+
+      fotosCount:  listaMultimedia.filter(a => a.categoria === 'fotos').length,
+      videosCount: listaMultimedia.filter(a => a.categoria === 'videos').length,
+    },
+    multimedia: {
+      fotos:        agrupar('fotos'),
+      fotosFachada: agrupar('fotosFachada'),
+      firmas:       agrupar('firmas'),
+      videos:       agrupar('videos'),
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// FUNCIÓN PRINCIPAL
+// ─────────────────────────────────────────────────────────────
+
 export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
-  const id         = generarIDUnico();
-  const carpeta    = `${FTP_CONFIG.baseDir}/${id}`;
-  const ftp        = new FTPClient(FTP_CONFIG);
-  const archivosSubidos = [];   // Para borrar localmente al final
+  const id      = generarIDUnico();
+  const carpeta = `${FTP_CONFIG.baseDir}/${id}`;
+  const ftp     = new FTPClient(FTP_CONFIG);
 
   try {
-    // ── PASO 1: Conectar ──────────────────────────────────
-    onProgreso(2, 'Conectando al servidor FTP...');
+    // ── 1. Conectar ────────────────────────────────────────
+    onProgreso(5, 'Conectando al servidor FTP...');
     await ftp.connect();
 
-    // ── PASO 2: Crear carpeta del registro ────────────────
-    onProgreso(8, 'Creando directorio en el servidor...');
-    await ftp.crearDirectorio(FTP_CONFIG.baseDir);   // Por si no existe
+    await ftp.crearDirectorio(FTP_CONFIG.baseDir);
     await ftp.crearDirectorio(carpeta);
 
-    // ── PASO 3: Empaquetar y subir datos.json ─────────────
-    onProgreso(12, 'Subiendo datos del formulario...');
+    // ── 2. Preparar lista de multimedia (nombres únicos) ───
+    onProgreso(10, 'Preparando archivos...');
+    const listaMultimedia = construirListaMultimedia(formulario);
 
-    const datosRegistro = {
-      id,
-      version   : '1.0',                              // Para versionado del esquema
-      timestamp : new Date().toISOString(),
-      dispositivo: {
-        plataforma: require('react-native').Platform.OS,
-      },
-      formulario: {
-        nombre   : formulario.nombre,
-        apellido : formulario.apellido,
-        direccion: formulario.direccion,
-        georef   : {
-          latitud : formulario.georef?.latitud,
-          longitud: formulario.georef?.longitud,
-        },
-        // fusionar campos arbitrarios (p. ej. buildDatos()) sin romper
-        // cuando `extra` sea undefined
-        ...(formulario.extra || {}),
-      },
-      multimedia: {
-        // El servidor sabrá qué archivos buscar en esta misma carpeta
-        fotos : (formulario.fotos  || []).map((f, i) => `foto_${i + 1}.jpg`),
-        videos: (formulario.videos || []).map((v, i) => `video_${i + 1}.mp4`),
-      },
-    };
+    // ── 3. Construir y subir datos.json ────────────────────
+    onProgreso(15, 'Subiendo datos.json...');
+    const datosJSON = construirDatosJSON(id, formulario, listaMultimedia);
 
-    const jsonString = JSON.stringify(datosRegistro, null, 2);
-    await ftp.subirArchivo(jsonString, `${carpeta}/datos.json`, false);
-    onProgreso(20, 'Datos del formulario subidos ✓');
+    await ftp.subirArchivo(
+      JSON.stringify(datosJSON, null, 2),
+      `${carpeta}/datos.json`,
+      false
+    );
+    onProgreso(25, 'datos.json subido ✓');
 
-    // ── PASO 4: Subir fotos ───────────────────────────────
-    const totalFotos  = (formulario.fotos  || []).length;
-    const totalVideos = (formulario.videos || []).length;
-    const totalArchivos = totalFotos + totalVideos;
+    // ── 4. Subir cada archivo multimedia ───────────────────
+    const total = listaMultimedia.length;
 
-    for (let i = 0; i < totalFotos; i++) {
-      const foto        = formulario.fotos[i];
-      const nombreRemoto= `foto_${i + 1}.jpg`;
-      const rutaRemota  = `${carpeta}/${nombreRemoto}`;
+    for (let i = 0; i < total; i++) {
+      const item        = listaMultimedia[i];
+      const rutaRemota  = `${carpeta}/${item.nombreRemoto}`;
+      const basePct     = 25 + Math.round((i / total) * 65);
 
-      const porcentajeBase = 20 + ((i / totalArchivos) * 60);
-      onProgreso(
-        Math.round(porcentajeBase),
-        `Subiendo foto ${i + 1} de ${totalFotos}...`
-      );
+      onProgreso(basePct, `Subiendo ${item.categoria} (${i + 1}/${total}): ${item.nombreRemoto}`);
 
-      // Leer foto como base64 y subir
-      const base64 = await leerArchivoComoBase64(foto.uri);
-      await ftp.subirArchivo(
-        base64,
+      await ftp.subirArchivoDesdeURI(
+        item.uriLocal,
         rutaRemota,
-        true,   // es base64
-        (sent, total) => {
-          const subPct = sent / total;
-          const pct    = porcentajeBase + (subPct / totalArchivos * 60);
-          onProgreso(Math.round(pct), `Foto ${i + 1}: ${Math.round(subPct * 100)}%`);
+        (sent, totalBytes) => {
+          const pct = basePct + Math.round((sent / totalBytes) * (65 / total));
+          onProgreso(pct, `${item.nombreRemoto}: ${Math.round((sent / totalBytes) * 100)}%`);
         }
-      );
-
-      archivosSubidos.push(foto.uri);
-      onProgreso(Math.round(porcentajeBase + 60 / totalArchivos), `Foto ${i + 1} subida ✓`);
-    }
-
-    // ── PASO 5: Subir videos ──────────────────────────────
-    for (let i = 0; i < totalVideos; i++) {
-      const video       = formulario.videos[i];
-      const nombreRemoto= `video_${i + 1}.mp4`;
-      const rutaRemota  = `${carpeta}/${nombreRemoto}`;
-
-      const porcentajeBase = 20 + (((totalFotos + i) / totalArchivos) * 60);
-      onProgreso(
-        Math.round(porcentajeBase),
-        `Subiendo video ${i + 1} de ${totalVideos}...`
-      );
-
-      const base64 = await leerArchivoComoBase64(video.uri);
-      await ftp.subirArchivo(
-        base64,
-        rutaRemota,
-        true,
-        (sent, total) => {
-          const subPct = sent / total;
-          const pct    = porcentajeBase + (subPct / totalArchivos * 60);
-          onProgreso(Math.round(pct), `Video ${i + 1}: ${Math.round(subPct * 100)}%`);
-        }
-      );
-
-      archivosSubidos.push(video.uri);
-      onProgreso(
-        Math.round(porcentajeBase + 60 / totalArchivos),
-        `Video ${i + 1} subido ✓`
       );
     }
 
-    // ── PASO 6: Crear archivo .done como señal al servidor ─
-    // El script del servidor esperará este archivo para saber
-    // que el registro está completo (no a medias).
-    onProgreso(85, 'Marcando registro como completo...');
+    // ── 5. Archivo .done ───────────────────────────────────
+    onProgreso(92, 'Marcando registro como completo...');
     await ftp.subirArchivo(
       JSON.stringify({ completado: true, timestamp: new Date().toISOString() }),
       `${carpeta}/.done`,
       false
     );
 
-    // ── PASO 7: Desconectar ───────────────────────────────
-    onProgreso(90, 'Cerrando conexión FTP...');
     await ftp.disconnect();
 
-    // ── PASO 8: Borrar archivos locales ───────────────────
-    // SOLO AQUÍ, después de confirmar que todo subió bien.
-    onProgreso(95, 'Limpiando archivos locales...');
-    for (const uri of archivosSubidos) {
-      await borrarArchivoLocal(uri);
-    }
-
-    onProgreso(100, '¡Registro enviado con éxito!');
-    return { success: true, id, mensaje: `Registro ${id} subido correctamente.` };
+    onProgreso(100, '¡Registro enviado correctamente!');
+    return { success: true, id, carpeta: id, mensaje: 'Registro enviado correctamente' };
 
   } catch (error) {
     console.error('[FTPUpload] Error:', error);
-
-    // Intentar cerrar la conexión aunque haya fallado
     try { await ftp.disconnect(); } catch (_) {}
-
-    // NO borramos los archivos locales si hubo error
-    return {
-      success: false,
-      id,
-      mensaje: `Error al subir el registro: ${error.message}`,
-    };
+    return { success: false, id, mensaje: error.message };
   }
 }
