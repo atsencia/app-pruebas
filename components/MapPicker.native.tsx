@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { Feather, MaterialIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import Colors from "@/constants/colors";
 
 const C = Colors.light;
@@ -14,43 +13,42 @@ interface Props {
 }
 
 export default function MapPicker({ latitud, longitud, onLocationChange }: Props) {
-  const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "granted" | "denied">("idle");
-  const [mapRegion, setMapRegion] = useState({
-    latitude: 4.7110,
-    longitude: -74.0721,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  });
 
-  const requestLocation = async () => {
-    setLocationStatus("loading");
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setLocationStatus("denied");
-        return;
-      }
-      const loc = await Location.getCurrentPositionAsync({
+ 
+  const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "granted" | "denied">("idle");
+
+const requestLocation = async () => {
+  setLocationStatus("loading");
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      setLocationStatus("denied");
+      return;
+    }
+
+    // Intenta ubicación actual
+    let loc = await Location.getLastKnownPositionAsync({
+      maxAge: 60000, // acepta ubicación de hasta 1 minuto atrás
+      requiredAccuracy: 100,
+    });
+
+    // Si no hay última ubicación, pide una nueva
+    if (!loc) {
+      loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      const { latitude, longitude } = loc.coords;
-      onLocationChange(latitude, longitude);
-      setMapRegion({ latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 });
-      setLocationStatus("granted");
-    } catch {
-      setLocationStatus("denied");
     }
-  };
 
-  const handleMapPress = (e: any) => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    onLocationChange(latitude, longitude);
-    setMapRegion((r) => ({ ...r, latitude, longitude }));
-    if (locationStatus === "idle") setLocationStatus("granted");
-  };
+    onLocationChange(loc.coords.latitude, loc.coords.longitude);
+    setLocationStatus("granted");
+  } catch {
+    setLocationStatus("denied");
+  }
+};
 
   return (
     <View style={styles.container}>
+
       {(locationStatus === "idle" || locationStatus === "denied") && (
         <View style={styles.geoPrompt}>
           <View style={styles.geoIconBg}>
@@ -79,43 +77,35 @@ export default function MapPicker({ latitud, longitud, onLocationChange }: Props
         </View>
       )}
 
-      {(locationStatus === "granted" || latitud !== null) && (
-        <View style={styles.mapContainer}>
-          <MapView
-            style={styles.map}
-            provider={PROVIDER_DEFAULT}
-            region={mapRegion}
-            onPress={handleMapPress}
-            showsUserLocation={locationStatus === "granted"}
-          >
-            {latitud !== null && longitud !== null && (
-              <Marker
-                coordinate={{ latitude: latitud, longitude: longitud }}
-                title="Ubicación del vecino"
-                pinColor={C.accent}
-              />
-            )}
-          </MapView>
-          <View style={styles.mapOverlayHint}>
-            <Feather name="info" size={11} color="#fff" />
-            <Text style={styles.mapHintText}>Toca el mapa para ajustar</Text>
+      {locationStatus === "granted" && latitud !== null && longitud !== null && (
+        <>
+          {/* Preview estático con link a Google Maps */}
+          <View style={styles.mapPlaceholder}>
+            <MaterialIcons name="location-on" size={32} color={C.primary} />
+            <Text style={styles.mapPlaceholderText}>Ubicación capturada</Text>
+            <Pressable
+              style={styles.retryBtn}
+              onPress={requestLocation}
+            >
+              <Feather name="refresh-cw" size={12} color={C.primary} />
+              <Text style={styles.retryText}>Recapturar</Text>
+            </Pressable>
           </View>
-        </View>
+
+          <View style={styles.coordsBox}>
+            <View style={styles.coordItem}>
+              <Text style={styles.coordLabel}>Latitud</Text>
+              <Text style={styles.coordValue}>{latitud ? latitud.toFixed(6) : "-"}</Text>
+            </View>
+            <View style={styles.coordDivider} />
+            <View style={styles.coordItem}>
+              <Text style={styles.coordLabel}>Longitud</Text>
+              <Text style={styles.coordValue}>{longitud.toFixed(6)}</Text>
+            </View>
+          </View>
+        </>
       )}
 
-      {latitud !== null && longitud !== null && (
-        <View style={styles.coordsBox}>
-          <View style={styles.coordItem}>
-            <Text style={styles.coordLabel}>Latitud</Text>
-            <Text style={styles.coordValue}>{latitud.toFixed(6)}</Text>
-          </View>
-          <View style={styles.coordDivider} />
-          <View style={styles.coordItem}>
-            <Text style={styles.coordLabel}>Longitud</Text>
-            <Text style={styles.coordValue}>{longitud.toFixed(6)}</Text>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
@@ -128,102 +118,60 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   geoIconBg: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 56, height: 56, borderRadius: 16,
     backgroundColor: "#EFF3F8",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 2,
+    justifyContent: "center", alignItems: "center", marginBottom: 2,
   },
   geoPromptTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: C.text,
+    fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text,
   },
   geoPromptSub: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: C.error,
-    textAlign: "center",
+    fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.error, textAlign: "center",
   },
   geoBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: C.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 11,
-    borderRadius: 12,
-    marginTop: 4,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: C.primary, paddingHorizontal: 20,
+    paddingVertical: 11, borderRadius: 12, marginTop: 4,
   },
   geoBtnText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff",
   },
   geoLoading: {
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 20,
+    alignItems: "center", gap: 10, paddingVertical: 20,
   },
   geoLoadingText: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
+    fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary,
   },
-  mapContainer: {
-    borderRadius: 14,
-    overflow: "hidden",
-    height: 200,
-    position: "relative",
+  mapPlaceholder: {
+    height: 140, borderRadius: 14,
+    backgroundColor: "#EFF3F8",
+    alignItems: "center", justifyContent: "center", gap: 8,
+    borderWidth: 1.5, borderColor: C.border,
   },
-  map: { flex: 1 },
-  mapOverlayHint: {
-    position: "absolute",
-    bottom: 8,
-    left: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  mapPlaceholderText: {
+    fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.primary,
   },
-  mapHintText: {
-    fontSize: 10,
-    fontFamily: "Inter_400Regular",
-    color: "#fff",
+  retryBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 8, borderWidth: 1, borderColor: C.primary,
+  },
+  retryText: {
+    fontSize: 12, fontFamily: "Inter_500Medium", color: C.primary,
   },
   coordsBox: {
-    flexDirection: "row",
-    backgroundColor: "#EFF3F8",
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    flexDirection: "row", backgroundColor: "#EFF3F8",
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
     alignItems: "center",
   },
-  coordItem: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-  },
+  coordItem: { flex: 1, alignItems: "center", gap: 2 },
   coordLabel: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    color: C.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 10, fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.5,
   },
   coordValue: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: C.primary,
+    fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.primary,
   },
-  coordDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: C.border,
-  },
+  coordDivider: { width: 1, height: 32, backgroundColor: C.border },
 });
