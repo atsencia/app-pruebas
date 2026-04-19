@@ -1,5 +1,5 @@
 // services/FTPUploadService.js
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import FTPClient from './FTPClient';
 
 const FTP_CONFIG = {
@@ -42,6 +42,7 @@ function extDeURI(uri, fallback = 'jpg') {
  */
 function construirListaMultimedia(formulario) {
   const lista = [];
+  const extra = formulario.extra || {};
 
   // ── Fotos generales ──────────────────────────────────────
   (formulario.fotos || []).forEach((f, i) => {
@@ -66,7 +67,7 @@ function construirListaMultimedia(formulario) {
   });
 
   // ── Firma concesionario (si vino como URI, no como base64) ─
-  const firmaConcUri = formulario.extra?.firmaConcesionario?.firma;
+  const firmaConcUri = extra.firmaConcesionario && extra.firmaConcesionario.firma;
   if (firmaConcUri && firmaConcUri.startsWith('file://')) {
     const ext = extDeURI(firmaConcUri, 'png');
     lista.push({
@@ -78,7 +79,7 @@ function construirListaMultimedia(formulario) {
   }
 
   // ── Firma profesional (si vino como URI, no como base64) ───
-  const firmaProfUri = formulario.extra?.firmaProfesional?.firma;
+  const firmaProfUri = extra.firmaProfesional && extra.firmaProfesional.firma;
   if (firmaProfUri && firmaProfUri.startsWith('file://')) {
     const ext = extDeURI(firmaProfUri, 'png');
     lista.push({
@@ -118,8 +119,10 @@ function construirDatosJSON(id, formulario, listaMultimedia) {
     return firmaRaw; // base64 inline (firma dibujada en pantalla)
   };
 
-  const firmaConcNombre = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_concesionario'))?.nombreRemoto ?? null;
-  const firmaProfNombre = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_profesional'))?.nombreRemoto ?? null;
+  const firmaConcItem = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_concesionario'));
+  const firmaProfItem = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_profesional'));
+  const firmaConcNombre = firmaConcItem ? firmaConcItem.nombreRemoto : null;
+  const firmaProfNombre = firmaProfItem ? firmaProfItem.nombreRemoto : null;
 
   // Agrupar multimedia por categoría para la sección "multimedia" del JSON
   const agrupar = (cat) =>
@@ -140,11 +143,11 @@ function construirDatosJSON(id, formulario, listaMultimedia) {
       // Sobrescribir firmas con referencia correcta (archivo o base64)
       firmaConcesionario: {
         ...extra.firmaConcesionario,
-        firma: resolverFirma(extra.firmaConcesionario?.firma, firmaConcNombre),
+        firma: resolverFirma(extra.firmaConcesionario && extra.firmaConcesionario.firma, firmaConcNombre),
       },
       firmaProfesional: {
         ...extra.firmaProfesional,
-        firma: resolverFirma(extra.firmaProfesional?.firma, firmaProfNombre),
+        firma: resolverFirma(extra.firmaProfesional && extra.firmaProfesional.firma, firmaProfNombre),
       },
 
       fotosCount:  listaMultimedia.filter(a => a.categoria === 'fotos').length,
@@ -196,12 +199,24 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
 
     for (let i = 0; i < total; i++) {
       const item        = listaMultimedia[i];
+
+              // ← AGREGAR ESTO
+        console.log('[DEBUG multimedia]', {
+          categoria:    item.categoria,
+          nombreRemoto: item.nombreRemoto,
+          uriLocal:     item.uriLocal,
+        });
+
+          const fileInfo = await FileSystem.getInfoAsync(item.uriLocal, { size: true });
+          console.log('[DEBUG fileInfo]', fileInfo);
+
       const rutaRemota  = `${carpeta}/${item.nombreRemoto}`;
       const basePct     = 25 + Math.round((i / total) * 65);
 
       onProgreso(basePct, `Subiendo ${item.categoria} (${i + 1}/${total}): ${item.nombreRemoto}`);
 
       await ftp.subirArchivoDesdeURI(
+
         item.uriLocal,
         rutaRemota,
         (sent, totalBytes) => {
