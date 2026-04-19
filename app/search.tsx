@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -151,7 +152,14 @@ export default function SearchScreen() {
     <View style={[styles.root, { backgroundColor: C.background }]}>
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: topPadding + 8 }]}>
-        <View>
+        <Pressable
+          onPress={() => router.push("/form")}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+          hitSlop={8}
+        >
+          <Feather name="arrow-left" size={18} color="#fff" />
+        </Pressable>
+        <View style={styles.topBarTitleWrap}>
           <Text style={styles.topBarTitle}>Buscar Registros</Text>
           <Text style={styles.topBarSub}>Actas de vecindad</Text>
         </View>
@@ -252,9 +260,23 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   topBar: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#1a3a6b",
     paddingHorizontal: 20,
     paddingBottom: 16,
+    gap: 12,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  topBarTitleWrap: {
+    flex: 1,
   },
   topBarTitle: {
     fontSize: 18,

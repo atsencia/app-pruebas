@@ -18,10 +18,7 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { fetch as expoFetch } from "expo/fetch";
-import { File as ExpoFile } from "expo-file-system";
 import { useAuth } from "@/contexts/AuthContext";
-import { getApiUrl } from "@/lib/query-client";
 import SignaturePad from "@/components/SignaturePad";
 import MapPicker from "@/components/MapPicker";
 import PhotoPickerSection from "@/components/PhotoPickerSection";
@@ -29,8 +26,7 @@ import VideoPickerSection from "@/components/VideoPickerSection";
 import ToggleField from "@/components/ToggleField";
 import Colors from "@/constants/colors";
 
-const C      = Colors.light;
-const SCREEN = Dimensions.get("window");
+const C           = Colors.light;
 const SIDEBAR_WIDTH = 260;
 
 // ─────────────────────────────────────────────
@@ -52,37 +48,27 @@ export interface VideoItem {
 }
 
 export interface FormData {
-  // ── Tipo de acta ──────────────────────────
   tipoActa: "inicio" | "seguimiento" | "cierre" | "";
 
-  // ── Datos del vecino / propietario ────────
   nombre:     string;
   cedula:     string;
   direccion:  string;
   telefono:   string;
-  /** Correo para enviarle el link de firma al propietario */
   propCorreo: string;
-
-  // ── Correo interventoría ──────────────────
-  /** Solo correo — el delegado completa sus datos en el link de firma */
   interCorreo: string;
 
-  // ── Firmas capturadas en la app ───────────
   firmaConcesionario: FirmaPersona;
   firmaProfesional:   FirmaPersona;
 
-  // ── Georef ───────────────────────────────
   latitud:  number | null;
   longitud: number | null;
 
-  // ── Predio ───────────────────────────────
   longitudFrenteYFondo: string;
   numeroPisos:          string;
   estrato:              string;
   anioConstruccion:     string;
   estaOcupada:          boolean;
 
-  // ── Servicios públicos (texto libre) ──────
   servicioAgua:           string;
   servicioAlcantarillado: string;
   servicioEnergia:        string;
@@ -90,7 +76,6 @@ export interface FormData {
   servicioGas:            string;
   servicioOtros:          string;
 
-  // ── Uso actual (texto libre) ──────────────
   usoResidencial:   string;
   usoComercial:     string;
   usoIndustrial:    string;
@@ -101,7 +86,6 @@ export interface FormData {
   usoMixto:         string;
   usoOtro:          string;
 
-  // ── Acceso vehicular ──────────────────────
   tieneGaraje:          boolean;
   cantidadGarajes:      string;
   usoGaraje:            string;
@@ -109,7 +93,6 @@ export interface FormData {
   usoGarajeResidencial: string;
   anchoAccesoVehicular: string;
 
-  // ── Evaluación estructural ────────────────
   fisurasCerradas:     boolean;
   fisurasCerradasDesc: string;
   fisurasAbiertas:     boolean;
@@ -117,21 +100,19 @@ export interface FormData {
   grietas:             boolean;
   grietasDesc:         string;
 
-  // ── Acabados y fachada ────────────────────
   acabadosPisos: string;
   estadoFachada: string;
 
-  // ── Verticalidad (≥4 pisos) ───────────────
   verticalidad:      boolean;
   verticalidadNotas: string;
 
-  // ── Documentación adicional ───────────────
   planTopografico:          boolean;
   observacionesProfesional: string;
 
   // ── Multimedia ────────────────────────────
-  fotos:  string[];
-  videos: VideoItem[];
+  fotos:        string[];        // fotos generales (URIs)
+  fotosFachada: string[];        // ← NUEVO: fotos específicas de la fachada
+  videos:       VideoItem[];
 }
 
 interface FieldErrors {
@@ -144,10 +125,10 @@ interface FieldErrors {
 // CONSTANTES
 // ─────────────────────────────────────────────
 
-const TIPO_ACTA_OPTIONS: { value: FormData["tipoActa"]; label: string; icon: any }[] = [
-  { value: "inicio",      label: "Inicio",      icon: "play-circle"  },
-  { value: "seguimiento", label: "Seguimiento", icon: "refresh-cw"   },
-  { value: "cierre",      label: "Cierre",      icon: "check-circle" },
+const TIPO_ACTA_OPTIONS: { value: FormData["tipoActa"]; label: string }[] = [
+  { value: "inicio",      label: "Inicio",      },
+  { value: "seguimiento", label: "Seguimiento"  },
+  { value: "cierre",      label: "Cierre" },
 ];
 
 const SERVICIOS = [
@@ -160,22 +141,21 @@ const SERVICIOS = [
 ] as const;
 
 const USOS_ACTUALES = [
-  { key: "usoResidencial",   label: "Residencial"             },
-  { key: "usoComercial",     label: "Comercial"               },
-  { key: "usoIndustrial",    label: "Industrial"              },
-  { key: "usoInstitucional", label: "Institucional"           },
-  { key: "usoRecreacional",  label: "Recreacional"            },
-  { key: "usoBaldio",        label: "Baldío"                  },
-  { key: "usoBIC",           label: "Bien de Interés Cultural"},
-  { key: "usoMixto",         label: "Mixto"                   },
-  { key: "usoOtro",          label: "Otro ¿cuál?"             },
+  { key: "usoResidencial",   label: "Residencial"              },
+  { key: "usoComercial",     label: "Comercial"                },
+  { key: "usoIndustrial",    label: "Industrial"               },
+  { key: "usoInstitucional", label: "Institucional"            },
+  { key: "usoRecreacional",  label: "Recreacional"             },
+  { key: "usoBaldio",        label: "Baldío"                   },
+  { key: "usoBIC",           label: "Bien de Interés Cultural" },
+  { key: "usoMixto",         label: "Mixto"                    },
+  { key: "usoOtro",          label: "Otro ¿cuál?"              },
 ] as const;
 
-// Agregar más rutas aquí en el futuro (descomentar o añadir)
 const SIDEBAR_ITEMS: { icon: any; label: string; route: string; description: string }[] = [
-  { icon: "search",   label: "Buscar registros",   route: "/search",   description: "Consultar actas existentes" },
-  { icon: "users",    label: "Gestionar usuarios", route: "/createUser",    description: "Solo administradores"       },
-  { icon: "settings", label: "Gestionar Usuarios",      route: "/userManagement", description: "Solo Admin"     },
+  { icon: "search",   label: "Buscar registros",   route: "/search",         description: "Consultar actas existentes" },
+  { icon: "users",    label: "Crear usuario",       route: "/createUser",     description: "Solo administradores"       },
+  { icon: "settings", label: "Gestionar usuarios",  route: "/userManagement", description: "Solo administradores"       },
 ];
 
 // ─────────────────────────────────────────────
@@ -227,11 +207,13 @@ export default function FormScreen() {
     acabadosPisos: "", estadoFachada: "",
     verticalidad: false, verticalidadNotas: "",
     planTopografico: false, observacionesProfesional: "",
-    fotos: [], videos: [],
+    fotos: [],
+    fotosFachada: [],   // ← NUEVO
+    videos: [],
   });
 
-  const [errors,        setErrors]       = useState<FieldErrors>({});
-  const [isSubmitting,  setIsSubmitting] = useState(false);
+  const [errors,       setErrors]      = useState<FieldErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const topPadding    = Platform.OS === "web" ? Math.max(insets.top, 67)    : insets.top;
   const bottomPadding = Platform.OS === "web" ? Math.max(insets.bottom, 34) : insets.bottom;
@@ -309,7 +291,6 @@ export default function FormScreen() {
     planTopografico:          form.planTopografico,
     planTopograficoArchivo:   null,
     observacionesProfesional: form.observacionesProfesional,
-    // Propietario: datos básicos + correo para el link; la firma la completan en el link
     firmaPropietario: {
       nombre: form.nombre.trim(),
       cedula: form.cedula.trim(),
@@ -317,21 +298,19 @@ export default function FormScreen() {
       firma:  null,
       correo: form.propCorreo.trim(),
     },
-    // Interventoría: solo correo del delegado; el resto lo completan en el link
     firmaInterventoria: {
       nombre: "", cedula: "", cargo: "", firma: null,
       correo: form.interCorreo.trim(),
     },
-    // Estas dos se capturan directamente en la app
     firmaConcesionario: form.firmaConcesionario,
     firmaProfesional:   form.firmaProfesional,
-    fotosCount:  form.fotos.length,
-    videosCount: form.videos.length,
+    fotosCount:        form.fotos.length,
+    fotosFachadaCount: form.fotosFachada.length,   // ← NUEVO
+    videosCount:       form.videos.length,
   });
 
   // ── Submit ──────────────────────────────────
   const handleSubmit = async () => {
-    console.log("Formulario a enviar:", buildDatos());
     if (!validate()) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
@@ -341,12 +320,13 @@ export default function FormScreen() {
       const resultado = await subirFormularioFTP(
         {
           nombre:    form.nombre.trim(),
-          apellido:  form.cedula.trim(),
+          apellido: form.cedula.trim(), // o el valor correcto que quieras usar
           direccion: form.direccion.trim(),
           georef:    { latitud: form.latitud, longitud: form.longitud },
-          fotos:     form.fotos.map((uri) => ({ uri })),
-          videos:    form.videos.map((v)   => ({ uri: v.uri })),
-          extra:     buildDatos(),
+          fotos:        form.fotos.map((uri) => ({ uri })),
+          fotosFachada: form.fotosFachada.map((uri) => ({ uri })),  // ← NUEVO
+          videos:       form.videos.map((v) => ({ uri: v.uri })),
+          extra:        buildDatos(),
         },
         (porcentaje: any, mensaje: any) => console.log(`[FTP] ${porcentaje}% — ${mensaje}`)
       );
@@ -355,10 +335,11 @@ export default function FormScreen() {
       router.push({
         pathname: "/success",
         params: {
-          numeroRegistro: resultado.id,
-          nombre:         form.nombre.trim(),
-          fotosCount:     String(form.fotos.length),
-          videosCount:    String(form.videos.length),
+          numeroRegistro:     resultado.id,
+          nombre:             form.nombre.trim(),
+          fotosCount:         String(form.fotos.length),
+          fotosFachadaCount:  String(form.fotosFachada.length),  // ← NUEVO
+          videosCount:        String(form.videos.length),
         },
       });
     } catch (e: any) {
@@ -376,11 +357,11 @@ export default function FormScreen() {
     <View style={[styles.root, { backgroundColor: C.background }]}>
 
       {/* TOP BAR */}
-      <View style={[styles.topBar, { paddingTop: topPadding + 8, backgroundColor: C.primary }]}>
+      <View style={[styles.topBar, { paddingTop: topPadding + 10, backgroundColor: C.primary }]}>
         <Pressable
           onPress={openSidebar}
           style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
-          hitSlop={8}
+          hitSlop={10}
         >
           <Feather name="menu" size={20} color="#fff" />
         </Pressable>
@@ -391,7 +372,7 @@ export default function FormScreen() {
         <Pressable
           onPress={handleLogout}
           style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
-          hitSlop={8}
+          hitSlop={10}
         >
           <Feather name="log-out" size={18} color="#fff" />
         </Pressable>
@@ -400,7 +381,7 @@ export default function FormScreen() {
       {/* FORMULARIO */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding + 24 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding + 32 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -421,7 +402,6 @@ export default function FormScreen() {
                   ]}
                   onPress={() => set("tipoActa", opt.value)}
                 >
-                  <Feather name={opt.icon} size={16} color={active ? "#fff" : C.textSecondary} />
                   <Text style={[styles.tipoActaBtnText, active && styles.tipoActaBtnTextActive]}>
                     {opt.label}
                   </Text>
@@ -453,17 +433,21 @@ export default function FormScreen() {
               maxLength={12}
             />
           </Field>
-          <Field label="Teléfono">
-            <TextInput
-              style={styles.input}
-              placeholder="Ej. 3001234567"
-              placeholderTextColor={C.textSecondary}
-              value={form.telefono}
-              onChangeText={(v) => set("telefono", v.replace(/\D/g, ""))}
-              keyboardType="phone-pad"
-              maxLength={15}
-            />
-          </Field>
+          <View style={styles.row}>
+            <View style={styles.rowHalf}>
+              <Field label="Teléfono">
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej. 3001234567"
+                  placeholderTextColor={C.textSecondary}
+                  value={form.telefono}
+                  onChangeText={(v) => set("telefono", v.replace(/\D/g, ""))}
+                  keyboardType="phone-pad"
+                  maxLength={15}
+                />
+              </Field>
+            </View>
+          </View>
           <Field label="Dirección" error={errors.direccion}>
             <TextInput
               style={[styles.input, styles.inputMultiline, errors.direccion && styles.inputError]}
@@ -495,7 +479,7 @@ export default function FormScreen() {
           </Field>
         </Section>
 
-        {/* 2. INTERVENTORÍA — solo correo */}
+        {/* 2. INTERVENTORÍA */}
         <Section icon="briefcase" title="Interventoría">
           <InfoBox text="Solo se requiere el correo del representante delegado. Recibirá un enlace para completar sus datos y firmar." />
           <Field label="Correo del delegado de interventoría">
@@ -515,7 +499,7 @@ export default function FormScreen() {
         <Section icon="home" title="Datos del Predio">
           <View style={styles.row}>
             <View style={styles.rowHalf}>
-              <Field label="Long. frente y fondo (m)">
+              <Field label="Frente y fondo (m)">
                 <TextInput
                   style={styles.input}
                   placeholder="Ej. 20"
@@ -555,7 +539,7 @@ export default function FormScreen() {
               </Field>
             </View>
             <View style={styles.rowHalf}>
-              <Field label="Año de construcción">
+              <Field label="Año construcción">
                 <TextInput
                   style={styles.input}
                   placeholder="Ej. 1998"
@@ -599,10 +583,8 @@ export default function FormScreen() {
         <Section icon="layers" title="Uso Actual del Predio">
           <InfoBox text="Describa el uso. Si no aplica, deje en blanco (se enviará como 'NA')." />
           {USOS_ACTUALES.map(({ key, label }) => (
-            <View key={key} style={styles.row}>
-              <View style={styles.usoLabelContainer}>
-                <Text style={styles.usoLabel}>{label}:</Text>
-              </View>
+            <View key={key} style={styles.usoRow}>
+              <Text style={styles.usoLabel}>{label}</Text>
               <View style={styles.usoInputContainer}>
                 <TextInput
                   style={[styles.input, styles.usoInput]}
@@ -625,26 +607,32 @@ export default function FormScreen() {
           />
           {form.tieneGaraje && (
             <>
-              <Field label="¿Cuántos garajes?">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 1"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.cantidadGarajes}
-                  onChangeText={(v) => set("cantidadGarajes", v.replace(/\D/g, ""))}
-                  keyboardType="numeric"
-                  maxLength={2}
-                />
-              </Field>
-              <Field label="Se usa como">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. Tienda, Bodega..."
-                  placeholderTextColor={C.textSecondary}
-                  value={form.usoGaraje}
-                  onChangeText={(v) => set("usoGaraje", v)}
-                />
-              </Field>
+              <View style={styles.row}>
+                <View style={styles.rowHalf}>
+                  <Field label="Cantidad de garajes">
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ej. 1"
+                      placeholderTextColor={C.textSecondary}
+                      value={form.cantidadGarajes}
+                      onChangeText={(v) => set("cantidadGarajes", v.replace(/\D/g, ""))}
+                      keyboardType="numeric"
+                      maxLength={2}
+                    />
+                  </Field>
+                </View>
+                <View style={styles.rowHalf}>
+                  <Field label="Se usa como">
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ej. Tienda"
+                      placeholderTextColor={C.textSecondary}
+                      value={form.usoGaraje}
+                      onChangeText={(v) => set("usoGaraje", v)}
+                    />
+                  </Field>
+                </View>
+              </View>
               <View style={styles.row}>
                 <View style={styles.rowHalf}>
                   <Field label="Uso comercial">
@@ -686,62 +674,61 @@ export default function FormScreen() {
         {/* 7. EVALUACIÓN ESTRUCTURAL */}
         <Section icon="alert-triangle" title="Evaluación Estructural">
           <InfoBox text="Las fisuras son discontinuidades en muros, vigas, columnas, losas y placas de entrepiso." />
-          <View style={styles.structuralItem}>
-            <ToggleField
-              label="Fisuras cerradas"
-              description="Discontinuidad cerrada que no afecta la calidad estructural."
-              value={form.fisurasCerradas}
-              onChange={(v) => set("fisurasCerradas", v)}
+
+          <ToggleField
+            label="Fisuras cerradas"
+            description="Discontinuidad cerrada que no afecta la calidad estructural."
+            value={form.fisurasCerradas}
+            onChange={(v) => set("fisurasCerradas", v)}
+          />
+          {form.fisurasCerradas && (
+            <TextInput
+              style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+              placeholder="Descripción de ubicación y alcance..."
+              placeholderTextColor={C.textSecondary}
+              value={form.fisurasCerradasDesc}
+              onChangeText={(v) => set("fisurasCerradasDesc", v)}
+              multiline numberOfLines={2}
             />
-            {form.fisurasCerradas && (
-              <TextInput
-                style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
-                placeholder="Descripción de ubicación y alcance..."
-                placeholderTextColor={C.textSecondary}
-                value={form.fisurasCerradasDesc}
-                onChangeText={(v) => set("fisurasCerradasDesc", v)}
-                multiline numberOfLines={2}
-              />
-            )}
-          </View>
+          )}
+
           <View style={styles.divider} />
-          <View style={styles.structuralItem}>
-            <ToggleField
-              label="Fisuras abiertas"
-              description="Discontinuidad abierta (0.2–2.0 mm) que puede afectar la estabilidad."
-              value={form.fisurasAbiertas}
-              onChange={(v) => set("fisurasAbiertas", v)}
+
+          <ToggleField
+            label="Fisuras abiertas"
+            description="Discontinuidad abierta (0.2–2.0 mm) que puede afectar la estabilidad."
+            value={form.fisurasAbiertas}
+            onChange={(v) => set("fisurasAbiertas", v)}
+          />
+          {form.fisurasAbiertas && (
+            <TextInput
+              style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+              placeholder="Descripción de ubicación y alcance..."
+              placeholderTextColor={C.textSecondary}
+              value={form.fisurasAbiertasDesc}
+              onChangeText={(v) => set("fisurasAbiertasDesc", v)}
+              multiline numberOfLines={2}
             />
-            {form.fisurasAbiertas && (
-              <TextInput
-                style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
-                placeholder="Descripción de ubicación y alcance..."
-                placeholderTextColor={C.textSecondary}
-                value={form.fisurasAbiertasDesc}
-                onChangeText={(v) => set("fisurasAbiertasDesc", v)}
-                multiline numberOfLines={2}
-              />
-            )}
-          </View>
+          )}
+
           <View style={styles.divider} />
-          <View style={styles.structuralItem}>
-            <ToggleField
-              label="Grietas"
-              description="Discontinuidad abierta (>2.0 mm, prof. >10 mm) que afecta estabilidad."
-              value={form.grietas}
-              onChange={(v) => set("grietas", v)}
+
+          <ToggleField
+            label="Grietas"
+            description="Discontinuidad abierta (>2.0 mm, prof. >10 mm) que afecta estabilidad."
+            value={form.grietas}
+            onChange={(v) => set("grietas", v)}
+          />
+          {form.grietas && (
+            <TextInput
+              style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+              placeholder="Descripción de ubicación y alcance..."
+              placeholderTextColor={C.textSecondary}
+              value={form.grietasDesc}
+              onChangeText={(v) => set("grietasDesc", v)}
+              multiline numberOfLines={2}
             />
-            {form.grietas && (
-              <TextInput
-                style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
-                placeholder="Descripción de ubicación y alcance..."
-                placeholderTextColor={C.textSecondary}
-                value={form.grietasDesc}
-                onChangeText={(v) => set("grietasDesc", v)}
-                multiline numberOfLines={2}
-              />
-            )}
-          </View>
+          )}
         </Section>
 
         {/* 8. ACABADOS Y FACHADA */}
@@ -768,7 +755,7 @@ export default function FormScreen() {
           </Field>
         </Section>
 
-        {/* 9. VERTICALIDAD (condicional ≥4 pisos) */}
+        {/* 9. VERTICALIDAD */}
         {showVerticalidad && (
           <Section icon="bar-chart-2" title="Verticalidad (≥4 niveles)">
             <InfoBox text="Verificar por topografía la verticalidad a lo largo de un vértice de la edificación." />
@@ -820,15 +807,25 @@ export default function FormScreen() {
           />
         </Section>
 
-        {/* 12. FOTOGRAFÍAS */}
-        <Section icon="camera" title="Fotografías">
+        {/* 12. FOTOGRAFÍAS GENERALES */}
+        <Section icon="camera" title="Fotografías Generales">
+          <InfoBox text="Fotos del interior, estructura, y demás elementos del predio." />
           <PhotoPickerSection
             photos={form.fotos}
             onPhotosChange={(fotos) => set("fotos", fotos)}
           />
         </Section>
 
-        {/* 13. VIDEOS */}
+        {/* 13. FOTOGRAFÍAS DE FACHADA ← NUEVO */}
+        <Section icon="image" title="Fotografías de Fachada">
+          <InfoBox text="Fotos específicas de la fachada exterior del predio. Se guardarán como fachada_001.jpg, fachada_002.jpg, etc." />
+          <PhotoPickerSection
+            photos={form.fotosFachada}
+            onPhotosChange={(fotos) => set("fotosFachada", fotos)}
+          />
+        </Section>
+
+        {/* 14. VIDEOS */}
         <Section icon="video" title="Videos">
           <VideoPickerSection
             videos={form.videos}
@@ -836,7 +833,7 @@ export default function FormScreen() {
           />
         </Section>
 
-        {/* 14. FIRMA — CONCESIONARIO SENCIA */}
+        {/* 15. FIRMA — CONCESIONARIO */}
         <Section icon="award" title="Representante Delegado Sencia S.A.S.">
           <InfoBox text="Datos y firma del representante delegado del concesionario." />
           <View style={styles.row}>
@@ -884,7 +881,7 @@ export default function FormScreen() {
           )}
         </Section>
 
-        {/* 15. FIRMA — PROFESIONAL TÉCNICO */}
+        {/* 16. FIRMA — PROFESIONAL TÉCNICO */}
         <Section icon="tool" title="Profesional Técnico">
           <InfoBox text="Datos y firma del profesional técnico que diligencia el acta." />
           <View style={styles.row}>
@@ -935,22 +932,24 @@ export default function FormScreen() {
         {/* RESUMEN */}
         <View style={styles.summary}>
           <Text style={styles.summaryTitle}>Resumen del Registro</Text>
-          <SummaryItem icon="file-text"   label="Tipo acta"    value={form.tipoActa ? form.tipoActa.charAt(0).toUpperCase() + form.tipoActa.slice(1) : "—"} filled={!!form.tipoActa} />
-          <SummaryItem icon="user"        label="Nombre"       value={form.nombre.trim()       || "—"} filled={!!form.nombre.trim()} />
-          <SummaryItem icon="credit-card" label="Cédula"       value={form.cedula.trim()       || "—"} filled={!!form.cedula.trim()} />
-          <SummaryItem icon="mail"        label="Prop. correo" value={form.propCorreo.trim()   || "—"} filled={!!form.propCorreo.trim()} />
-          <SummaryItem icon="mail"        label="Inter. correo"value={form.interCorreo.trim()  || "—"} filled={!!form.interCorreo.trim()} />
-          <SummaryItem icon="home"        label="Pisos"        value={form.numeroPisos ? `${form.numeroPisos} pisos — estrato ${form.estrato || "?"}` : "—"} filled={!!form.numeroPisos} />
-          <SummaryItem icon="map-pin"     label="Ubicación"    value={form.latitud !== null ? "Capturada" : "Sin capturar"} filled={form.latitud !== null} />
-          <SummaryItem icon="camera"      label="Fotos"        value={`${form.fotos.length} adjuntas`}  filled={form.fotos.length > 0} />
-          <SummaryItem icon="video"       label="Videos"       value={`${form.videos.length} adjuntos`} filled={form.videos.length > 0} />
-          <SummaryItem icon="award"       label="Conc. firma"  value={form.firmaConcesionario.firma ? "Capturada" : "Sin capturar"} filled={!!form.firmaConcesionario.firma} />
-          <SummaryItem icon="tool"        label="Prof. firma"  value={form.firmaProfesional.firma   ? "Capturada" : "Sin capturar"} filled={!!form.firmaProfesional.firma} />
+          <SummaryItem icon="file-text"   label="Tipo acta"       value={form.tipoActa ? form.tipoActa.charAt(0).toUpperCase() + form.tipoActa.slice(1) : "—"} filled={!!form.tipoActa} />
+          <SummaryItem icon="user"        label="Nombre"          value={form.nombre.trim()       || "—"} filled={!!form.nombre.trim()} />
+          <SummaryItem icon="credit-card" label="Cédula"          value={form.cedula.trim()       || "—"} filled={!!form.cedula.trim()} />
+          <SummaryItem icon="mail"        label="Prop. correo"    value={form.propCorreo.trim()   || "—"} filled={!!form.propCorreo.trim()} />
+          <SummaryItem icon="mail"        label="Inter. correo"   value={form.interCorreo.trim()  || "—"} filled={!!form.interCorreo.trim()} />
+          <SummaryItem icon="home"        label="Pisos"           value={form.numeroPisos ? `${form.numeroPisos} pisos — estrato ${form.estrato || "?"}` : "—"} filled={!!form.numeroPisos} />
+          <SummaryItem icon="map-pin"     label="Ubicación"       value={form.latitud !== null ? "Capturada" : "Sin capturar"} filled={form.latitud !== null} />
+          <SummaryItem icon="camera"      label="Fotos generales" value={`${form.fotos.length} adjuntas`}         filled={form.fotos.length > 0} />
+          <SummaryItem icon="image"       label="Fotos fachada"   value={`${form.fotosFachada.length} adjuntas`}  filled={form.fotosFachada.length > 0} />
+          <SummaryItem icon="video"       label="Videos"          value={`${form.videos.length} adjuntos`}        filled={form.videos.length > 0} />
+          <SummaryItem icon="award"       label="Conc. firma"     value={form.firmaConcesionario.firma ? "Capturada" : "Sin capturar"} filled={!!form.firmaConcesionario.firma} />
+          <SummaryItem icon="tool"        label="Prof. firma"     value={form.firmaProfesional.firma   ? "Capturada" : "Sin capturar"} filled={!!form.firmaProfesional.firma} />
           <View style={styles.uploadNote}>
             <Feather name="upload-cloud" size={12} color={C.textSecondary} />
             <Text style={styles.uploadNoteText}>
-              Los archivos se depositarán en el servidor FTP en /uploads/{"{"}REG-XXXXX{"}"}
-            </Text>
+
+      Los archivos se depositarán en el servidor FTP en /uploads/[ID del registro]            
+</Text>
           </View>
         </View>
 
@@ -976,7 +975,7 @@ export default function FormScreen() {
 
       </ScrollView>
 
-      {/* OVERLAY del sidebar */}
+      {/* OVERLAY */}
       {sidebarOpen && (
         <TouchableOpacity
           style={styles.overlay}
@@ -993,7 +992,6 @@ export default function FormScreen() {
           { transform: [{ translateX: sidebarAnim }] },
         ]}
       >
-        {/* Header */}
         <View style={styles.sidebarHeader}>
           <View style={styles.sidebarLogoRow}>
             <View style={styles.sidebarLogoBadge}>
@@ -1011,7 +1009,6 @@ export default function FormScreen() {
 
         <View style={styles.sidebarDivider} />
 
-        {/* Ítem activo */}
         <View style={[styles.sidebarItem, styles.sidebarItemActive]}>
           <View style={[styles.sidebarItemIcon, styles.sidebarItemIconActive]}>
             <Feather name="plus-circle" size={16} color="#fff" />
@@ -1022,7 +1019,6 @@ export default function FormScreen() {
           </View>
         </View>
 
-        {/* Ítems de navegación */}
         {SIDEBAR_ITEMS.map((item) => (
           <Pressable
             key={item.route}
@@ -1042,7 +1038,6 @@ export default function FormScreen() {
 
         <View style={styles.sidebarDivider} />
 
-        {/* Footer con usuario */}
         <View style={styles.sidebarFooter}>
           <View style={styles.sidebarUserRow}>
             <View style={styles.sidebarUserAvatar}>
@@ -1114,9 +1109,11 @@ function InfoBox({ text }: { text: string }) {
 function SummaryItem({ icon, label, value, filled }: { icon: any; label: string; value: string; filled: boolean }) {
   return (
     <View style={styles.summaryItem}>
-      <Feather name={icon} size={13} color={filled ? C.accent : C.textSecondary} />
-      <Text style={styles.summaryLabel}>{label}:</Text>
-      <Text style={[styles.summaryValue, filled && { color: C.text }]} numberOfLines={1}>{value}</Text>
+      <View style={[styles.summaryIconWrap, filled && styles.summaryIconWrapFilled]}>
+        <Feather name={icon} size={12} color={filled ? C.accent : C.textSecondary} />
+      </View>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={[styles.summaryValue, filled && styles.summaryValueFilled]} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -1128,38 +1125,45 @@ function SummaryItem({ icon, label, value, filled }: { icon: any; label: string;
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
+  // ── Top bar ─────────────────────────────────
   topBar: {
     flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 16, paddingBottom: 16, gap: 10,
+    paddingHorizontal: 16, paddingBottom: 18, gap: 12,
   },
   iconBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.18)",
     justifyContent: "center", alignItems: "center",
   },
   topBarCenter: { flex: 1 },
-  topBarTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff" },
-  topBarSub:    { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.7)", marginTop: 2 },
+  topBarTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.3 },
+  topBarSub:    { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 1 },
 
+  // ── Scroll / layout ─────────────────────────
   scroll:  { flex: 1 },
-  content: { padding: 16, gap: 16 },
+  content: { padding: 16, gap: 14 },
 
+  // ── Tipo de acta ─────────────────────────────
   tipoActaCard: {
-    backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 12,
+    backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 14,
     shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 8, elevation: 3,
   },
-  tipoActaLabel:         { fontSize: 11, fontFamily: "Inter_700Bold", color: C.textSecondary, letterSpacing: 1, textTransform: "uppercase" },
+  tipoActaLabel: {
+    fontSize: 10, fontFamily: "Inter_700Bold",
+    color: C.textSecondary, letterSpacing: 1.2, textTransform: "uppercase",
+  },
   tipoActaRow:           { flexDirection: "row", gap: 10 },
   tipoActaBtn: {
     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, paddingVertical: 12, borderRadius: 12,
+    gap: 6, paddingVertical: 13, borderRadius: 13,
     borderWidth: 1.5, borderColor: C.border, backgroundColor: C.inputBg,
   },
   tipoActaBtnActive:     { backgroundColor: C.primary, borderColor: C.primary },
   tipoActaBtnText:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
   tipoActaBtnTextActive: { color: "#fff" },
 
+  // ── Sección genérica ─────────────────────────
   section: {
     backgroundColor: C.card, borderRadius: 20, overflow: "hidden",
     shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
@@ -1167,109 +1171,155 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    paddingHorizontal: 18, paddingVertical: 14,
+    paddingHorizontal: 18, paddingVertical: 15,
     borderBottomWidth: 1, borderBottomColor: C.border,
+    backgroundColor: C.card,
   },
-  sectionIconBg:  { width: 28, height: 28, borderRadius: 8, backgroundColor: "#EFF3F8", justifyContent: "center", alignItems: "center" },
-  sectionTitle:   { fontSize: 14, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: 0.1 },
-  sectionBody:    { padding: 18, gap: 14 },
+  sectionIconBg: {
+    width: 30, height: 30, borderRadius: 9,
+    backgroundColor: C.primary + "15",
+    justifyContent: "center", alignItems: "center",
+  },
+  sectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.1 },
+  sectionBody:  { padding: 18, gap: 14 },
 
-  fieldContainer: { gap: 6 },
-  fieldLabel:     { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
+  // ── Campos ───────────────────────────────────
+  fieldContainer: { gap: 7 },
+  fieldLabel: {
+    fontSize: 11, fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.6,
+  },
   input: {
-    backgroundColor: C.inputBg, borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
-    paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: C.inputBg, borderRadius: 13,
+    borderWidth: 1.5, borderColor: C.border,
+    paddingHorizontal: 14, paddingVertical: 13,
     fontSize: 15, fontFamily: "Inter_400Regular", color: C.text,
   },
-  inputMultiline:      { minHeight: 80,  textAlignVertical: "top", paddingTop: 12 },
-  inputMultilineSmall: { minHeight: 56,  textAlignVertical: "top", paddingTop: 12 },
-  inputIndented:       { marginTop: 10, borderColor: C.primary + "44", borderLeftWidth: 3, borderRadius: 8, backgroundColor: "#F0F4FB" },
-  inputError:          { borderColor: C.error, backgroundColor: "#FEF2F2" },
-  fieldError:          { flexDirection: "row", alignItems: "center", gap: 4 },
-  fieldErrorText:      { fontSize: 11, fontFamily: "Inter_400Regular", color: C.error },
+  inputMultiline:      { minHeight: 82,  textAlignVertical: "top", paddingTop: 13 },
+  inputMultilineSmall: { minHeight: 58,  textAlignVertical: "top", paddingTop: 13 },
+  inputIndented: {
+    marginTop: 8, borderLeftWidth: 3,
+    borderLeftColor: C.primary + "55", borderRadius: 10,
+    backgroundColor: C.primary + "08",
+  },
+  inputError:     { borderColor: C.error, backgroundColor: C.error + "0A" },
+  fieldError:     { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
+  fieldErrorText: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.error },
 
+  // ── Hint correo ──────────────────────────────
   emailHint: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    backgroundColor: "#EFF3F8", borderRadius: 10, padding: 12,
+    flexDirection: "row", alignItems: "flex-start", gap: 9,
+    backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12,
     borderLeftWidth: 3, borderLeftColor: C.primary,
   },
-  emailHintText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
+  emailHintText: {
+    flex: 1, fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, lineHeight: 18,
+  },
 
-  row:            { flexDirection: "row", gap: 12 },
-  rowHalf:        { flex: 1 },
-  divider:        { height: 1, backgroundColor: C.border },
-  structuralItem: { gap: 0 },
+  // ── InfoBox ──────────────────────────────────
+  infoBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 9,
+    backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12,
+    borderLeftWidth: 3, borderLeftColor: C.primary,
+  },
+  infoText: {
+    flex: 1, fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, lineHeight: 18,
+  },
 
+  // ── Layout helpers ───────────────────────────
+  row:     { flexDirection: "row", gap: 12 },
+  rowHalf: { flex: 1 },
+  divider: { height: 1, backgroundColor: C.border, marginVertical: 2 },
+
+  // ── Servicios ────────────────────────────────
   servicesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   serviceItem:  { width: "47%", gap: 6 },
-  serviceLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
-  serviceInput: { paddingVertical: 10, fontSize: 14 },
+  serviceLabel: {
+    fontSize: 11, fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.5,
+  },
+  serviceInput: { paddingVertical: 11, fontSize: 14 },
 
-  usoLabelContainer: { width: 140, justifyContent: "center" },
-  usoLabel:          { fontSize: 13, fontFamily: "Inter_500Medium", color: C.text },
-  usoInputContainer: { flex: 1 },
-  usoInput:          { paddingVertical: 10, fontSize: 14 },
+  // ── Uso actual ───────────────────────────────
+  usoRow:           { flexDirection: "row", alignItems: "center", gap: 12 },
+  usoLabel:         { width: 130, fontSize: 13, fontFamily: "Inter_500Medium", color: C.text },
+  usoInputContainer:{ flex: 1 },
+  usoInput:         { paddingVertical: 10, fontSize: 14 },
 
-  infoBox:  { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#EFF3F8", borderRadius: 10, padding: 12, borderLeftWidth: 3, borderLeftColor: C.primary },
-  infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
-
-  sigConfirm:     { flexDirection: "row", alignItems: "center", gap: 5 },
+  // ── Firma confirmación ───────────────────────
+  sigConfirm:     { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
   sigConfirmText: { fontSize: 12, fontFamily: "Inter_500Medium", color: C.accent },
 
+  // ── Resumen ──────────────────────────────────
   summary: {
-    backgroundColor: C.card, borderRadius: 16, padding: 16, gap: 10,
+    backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 10,
     shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 8, elevation: 3,
   },
-  summaryTitle:  { fontSize: 13, fontFamily: "Inter_700Bold", color: C.text, marginBottom: 4 },
-  summaryItem:   { flexDirection: "row", alignItems: "center", gap: 8 },
-  summaryLabel:  { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textSecondary, width: 92 },
-  summaryValue:  { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary },
-  uploadNote:    { flexDirection: "row", alignItems: "flex-start", gap: 6, backgroundColor: "#EFF3F8", borderRadius: 8, padding: 10, marginTop: 4 },
-  uploadNoteText:{ flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 16 },
+  summaryTitle: {
+    fontSize: 13, fontFamily: "Inter_700Bold",
+    color: C.text, marginBottom: 6, letterSpacing: -0.1,
+  },
+  summaryItem:            { flexDirection: "row", alignItems: "center", gap: 10 },
+  summaryIconWrap:        { width: 24, height: 24, borderRadius: 7, backgroundColor: C.border, justifyContent: "center", alignItems: "center" },
+  summaryIconWrapFilled:  { backgroundColor: C.accent + "18" },
+  summaryLabel:           { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textSecondary, width: 100 },
+  summaryValue:           { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  summaryValueFilled:     { color: C.text, fontFamily: "Inter_500Medium" },
+  uploadNote: {
+    flexDirection: "row", alignItems: "flex-start", gap: 7,
+    backgroundColor: C.inputBg, borderRadius: 10, padding: 10, marginTop: 4,
+    borderWidth: 1, borderColor: C.border,
+  },
+  uploadNoteText: {
+    flex: 1, fontSize: 11, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, lineHeight: 16,
+  },
 
+  // ── Botón enviar ─────────────────────────────
   submitBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-    backgroundColor: C.accent, borderRadius: 16, paddingVertical: 18, marginTop: 4,
-    shadowColor: C.accent, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 10, elevation: 8,
+    backgroundColor: C.accent, borderRadius: 16, paddingVertical: 19, marginTop: 4,
+    shadowColor: C.accent, shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
   },
-  submitBtnPressed:  { opacity: 0.85, transform: [{ scale: 0.98 }] },
-  submitBtnDisabled: { opacity: 0.65 },
-  submitText:        { fontSize: 17, fontFamily: "Inter_700Bold", color: "#fff" },
+  submitBtnPressed:  { opacity: 0.85, transform: [{ scale: 0.985 }] },
+  submitBtnDisabled: { opacity: 0.6 },
+  submitText:        { fontSize: 17, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.2 },
 
-  // ── Sidebar ───────────────────────────────
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.35)", zIndex: 10 },
+  // ── Sidebar ──────────────────────────────────
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.38)", zIndex: 10 },
   sidebar: {
     position: "absolute", top: 0, left: 0, bottom: 0,
-    width: SIDEBAR_WIDTH, backgroundColor: C.card,
-    zIndex: 20,
-    shadowColor: "#000", shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.15, shadowRadius: 16, elevation: 20,
+    width: SIDEBAR_WIDTH, backgroundColor: C.card, zIndex: 20,
+    shadowColor: "#000", shadowOffset: { width: 5, height: 0 },
+    shadowOpacity: 0.12, shadowRadius: 20, elevation: 24,
   },
-  sidebarHeader:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingBottom: 16 },
-  sidebarLogoRow:   { flexDirection: "row", alignItems: "center", gap: 10 },
-  sidebarLogoBadge: { width: 36, height: 36, borderRadius: 10, backgroundColor: C.primary, justifyContent: "center", alignItems: "center" },
-  sidebarLogoText:  { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff" },
-  sidebarAppName:   { fontSize: 15, fontFamily: "Inter_700Bold", color: C.text },
-  sidebarAppSub:    { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
-  sidebarClose:     { width: 32, height: 32, borderRadius: 8, backgroundColor: C.inputBg, justifyContent: "center", alignItems: "center" },
-  sidebarDivider:   { height: 1, backgroundColor: C.border, marginHorizontal: 18, marginVertical: 8 },
+  sidebarHeader:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingBottom: 16 },
+  sidebarLogoRow:    { flexDirection: "row", alignItems: "center", gap: 10 },
+  sidebarLogoBadge:  { width: 38, height: 38, borderRadius: 11, backgroundColor: C.primary, justifyContent: "center", alignItems: "center" },
+  sidebarLogoText:   { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff" },
+  sidebarAppName:    { fontSize: 15, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.2 },
+  sidebarAppSub:     { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  sidebarClose:      { width: 32, height: 32, borderRadius: 9, backgroundColor: C.inputBg, justifyContent: "center", alignItems: "center" },
+  sidebarDivider:    { height: 1, backgroundColor: C.border, marginHorizontal: 18, marginVertical: 6 },
 
-  sidebarItem:           { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18, paddingVertical: 12 },
-  sidebarItemActive:     { backgroundColor: "#EFF3F8", borderRadius: 12, marginHorizontal: 8 },
-  sidebarItemIcon:       { width: 34, height: 34, borderRadius: 9, backgroundColor: "#EFF3F8", justifyContent: "center", alignItems: "center" },
-  sidebarItemIconActive: { backgroundColor: C.primary },
-  sidebarItemText:       { flex: 1 },
-  sidebarItemLabel:      { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
-  sidebarItemLabelActive:{ color: C.primary },
-  sidebarItemDesc:       { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 1 },
+  sidebarItem:            { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18, paddingVertical: 13 },
+  sidebarItemActive:      { backgroundColor: C.primary + "10", borderRadius: 13, marginHorizontal: 8 },
+  sidebarItemIcon:        { width: 34, height: 34, borderRadius: 10, backgroundColor: C.inputBg, justifyContent: "center", alignItems: "center" },
+  sidebarItemIconActive:  { backgroundColor: C.primary },
+  sidebarItemText:        { flex: 1 },
+  sidebarItemLabel:       { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
+  sidebarItemLabelActive: { color: C.primary },
+  sidebarItemDesc:        { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 1 },
 
-  sidebarFooter:         { position: "absolute", bottom: 0, left: 0, right: 0, padding: 18 },
-  sidebarUserRow:        { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.inputBg, borderRadius: 14, padding: 12 },
+  sidebarFooter:         { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16 },
+  sidebarUserRow:        { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.inputBg, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
   sidebarUserAvatar:     { width: 34, height: 34, borderRadius: 17, backgroundColor: C.primary, justifyContent: "center", alignItems: "center" },
   sidebarUserAvatarText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
   sidebarUserName:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.text },
-  sidebarUserRole:       { fontSize: 11, fontFamily: "Inter_400Regular",  color: C.textSecondary },
-  sidebarLogoutBtn:      { width: 32, height: 32, borderRadius: 8, backgroundColor: "#FEF2F2", justifyContent: "center", alignItems: "center" },
+  sidebarUserRole:       { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  sidebarLogoutBtn:      { width: 32, height: 32, borderRadius: 9, backgroundColor: C.error + "15", justifyContent: "center", alignItems: "center" },
 });
