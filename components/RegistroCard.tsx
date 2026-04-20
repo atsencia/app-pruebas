@@ -15,8 +15,8 @@ const TIPO_CONFIG = {
 };
 
 export default function RegistroCard({ registro, onEnviarLink }: Props) {
-  const tipo = TIPO_CONFIG[registro.tipoActa as keyof typeof TIPO_CONFIG] ?? {
-    label: registro.tipoActa,
+  const tipo = TIPO_CONFIG[registro.tipo_acta as keyof typeof TIPO_CONFIG] ?? {
+    label: registro.tipo_acta,
     bg: "#F3F4F6",
     text: "#374151",
   };

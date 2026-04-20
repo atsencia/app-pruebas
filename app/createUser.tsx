@@ -167,6 +167,7 @@ const ROLES: { value: Rol; label: string }[] = [
         "Authorization": `Bearer ${user?.token}`,
       },
       body: JSON.stringify({
+          nombre: form.nombre.trim(), 
         documento: form.documento.trim(),
         is_admin: form.rol === "admin" ? 1 : 0,
         password: form.password,
