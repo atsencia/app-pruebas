@@ -14,9 +14,10 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
+import { useAuth } from "@/contexts/AuthContext";
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type Rol = "inspector" | "admin" | "interventoria" | "";
+type Rol = "inspector" | "admin" |  "";
 
 interface FormState {
   nombre: string;
@@ -110,13 +111,13 @@ const C = {
 const ROLES: { value: Rol; label: string }[] = [
   { value: "inspector", label: "Inspector" },
   { value: "admin", label: "Administrador" },
-  { value: "interventoria", label: "Interventoría" },
 ];
 
 // ─── Componente principal ─────────────────────────────────────────────────────
+ export default function CreateUserScreen() {
+  const { user } = useAuth();
 
-export default function CreateUserScreen() {
-  const [form, setForm] = useState<FormState>({
+   const [form, setForm] = useState<FormState>({
     nombre: "",
     documento: "",
     rol: "",
@@ -147,42 +148,51 @@ export default function CreateUserScreen() {
   // ── Simula llamada al backend ──────────────────────────────────────────────
   // TODO: reemplazar por fetch real a POST /api/usuarios
   async function handleSubmit() {
-    setTouched({
-      nombre: true,
-      documento: true,
-      rol: true,
-      password: true,
-      password2: true,
+  setTouched({
+    nombre: true,
+    documento: true,
+    rol: true,
+    password: true,
+    password2: true,
+  });
+
+  if (!isValid) return;
+
+  setLoading(true);
+  try {
+    const response = await fetch("http://187.33.154.112:3000/api/users", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${user?.token}`,
+      },
+      body: JSON.stringify({
+        documento: form.documento.trim(),
+        is_admin: form.rol === "admin" ? 1 : 0,
+        password: form.password,
+      }),
     });
 
-    if (!isValid) return;
-
-    setLoading(true);
-    try {
-      await new Promise((res) => setTimeout(res, 1600));
-
-      // Simula ~65% éxito / ~35% error
-      const exito = Math.random() > 0.35;
-
-      if (exito) {
-        Alert.alert(
-          "Usuario creado",
-          `${form.nombre} ya puede iniciar sesión en el sistema.`,
-          [{ text: "Aceptar", onPress: () => router.back() }]
-        );
-      } else {
-        Alert.alert(
-          "Error al crear usuario",
-          "El número de documento ya existe o el servidor no respondió. Intenta de nuevo.",
-          [{ text: "Entendido" }]
-        );
-      }
-    } catch {
-      Alert.alert("Error de red", "No se pudo conectar al servidor.");
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || "Error al crear el usuario");
     }
+
+    Alert.alert(
+      "Usuario creado",
+      `${form.nombre} ya puede iniciar sesión en el sistema.`,
+      [{ text: "Aceptar", onPress: () => router.back() }]
+    );
+  } catch (e: any) {
+    Alert.alert(
+      "Error al crear usuario",
+      e.message || "No se pudo conectar al servidor.",
+      [{ text: "Entendido" }]
+    );
+  } finally {
+    setLoading(false);
   }
+}
 
   const initials = getInitials(form.nombre);
 
@@ -208,7 +218,7 @@ export default function CreateUserScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Avatar ── */}
-        <View style={styles.avatarArea}>
+        {/* <View style={styles.avatarArea}>
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarText}>{initials}</Text>
             <View style={styles.avatarBadge}>
@@ -216,7 +226,7 @@ export default function CreateUserScreen() {
             </View>
           </View>
           <Text style={styles.avatarHint}>Iniciales generadas automáticamente</Text>
-        </View>
+        </View> */}
 
         {/* ── Sección: Identificación ── */}
         <SectionLabel>Identificación</SectionLabel>
@@ -331,13 +341,13 @@ export default function CreateUserScreen() {
             onChange={(v) => set("activo", v)}
             isLast={false}
           />
-          <ToggleRow
+          {/* <ToggleRow
             label="Administrador"
             subtitle="Acceso completo al panel"
             value={form.esAdmin}
             onChange={(v) => set("esAdmin", v)}
             isLast
-          />
+          /> */}
         </View>
 
         {/* ── Botón ── */}
