@@ -48,7 +48,8 @@
           "locationAlwaysAndWhenInUsePermission": "Permite acceder a tu ubicación para georreferenciar el registro.",
           "locationWhenInUsePermission": "Permite acceder a tu ubicación para georreferenciar el registro."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

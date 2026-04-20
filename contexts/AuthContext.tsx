@@ -6,63 +6,80 @@ import React, {
   useMemo,
   ReactNode,
 } from "react";
-import { apiRequest, getQueryFn } from "@/lib/query-client";
+import * as SecureStore from "expo-secure-store";
 
 interface User {
   username: string;
+  token?: string;
 }
 
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  loginLocal: (username: string) => void; // set user directly without network
+  login: (documento: string, password: string, data?: any) => Promise<void>;
+  loginLocal: (username: string) => void;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const TOKEN_KEY = "auth_token";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // credenciales integradas para use local
-  const LOCAL_CREDENTIALS = { username: "admin", password: "registro2024" };
-
+  // Al arrancar, recupera el token guardado
   useEffect(() => {
-    // Si no quieres contacto con servidor, puedes omitir esta comprobación
-    const checkAuth = async () => {
+    const loadToken = async () => {
       try {
-        const res = await apiRequest("GET", "/api/auth/me");
-        const data = await res.json();
-        setUser(data);
-      } catch (error) {
+        const token = await SecureStore.getItemAsync(TOKEN_KEY);
+        if (token) {
+          setUser({ username: "usuario", token });
+        }
+      } catch {
         setUser(null);
       } finally {
         setIsLoading(false);
       }
     };
-
-    checkAuth();
+    loadToken();
   }, []);
 
-  const login = async (username: string, password: string) => {
-    // primero intentar correspondencia local
-    if (
-      username === LOCAL_CREDENTIALS.username &&
-      password === LOCAL_CREDENTIALS.password
-    ) {
-      setUser({ username });
+  const login = async (documento: string, password: string, data?: any) => {
+    if (data) {
+      const token = data.token || data.accessToken || data.access_token;
+      if (token) {
+        await SecureStore.setItemAsync(TOKEN_KEY, token);
+      }
+      setUser({
+        username: data.username || data.nombre || data.documento || documento,
+        token,
+      });
       return;
     }
 
-    // en caso de que quieras seguir usando el servidor remoto
-    const res = await apiRequest("POST", "/api/auth/login", {
-      username,
-      password,
+    const response = await fetch("http://187.33.154.112:3000/logueo/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documento, password }),
     });
-    const data = await res.json();
-    setUser(data.user);
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || "Credenciales incorrectas");
+    }
+
+    const result = await response.json();
+    const token = result.token || result.accessToken || result.access_token;
+
+    if (token) {
+      await SecureStore.setItemAsync(TOKEN_KEY, token);
+    }
+
+    setUser({
+      username: result.username || result.nombre || result.documento || documento,
+      token,
+    });
   };
 
   const loginLocal = (username: string) => {
@@ -70,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await apiRequest("POST", "/api/auth/logout");
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
     setUser(null);
   };
 

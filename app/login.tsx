@@ -32,34 +32,43 @@ export default function LoginScreen() {
   const LOCAL_CREDENTIALS = { username: "admin", password: "registro2024" };
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      setError("Por favor complete todos los campos");
-      return;
+  if (!username.trim() || !password.trim()) {
+    setError("Por favor complete todos los campos");
+    return;
+  }
+  setError("");
+  setIsLoading(true);
+  try {
+    const response = await fetch("http://187.33.154.112:3000/logueo/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        documento: username.trim(),
+        password: password,
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Credenciales incorrectas");
     }
-    setError("");
-    setIsLoading(true);
-    try {
-      // primero comprobación rápida local
-      if (
-        username.trim() === LOCAL_CREDENTIALS.username &&
-        password === LOCAL_CREDENTIALS.password
-      ) {
-        loginLocal(username.trim());
-      } else {
-        // si no coincide con las credenciales internas, se delega
-        // al método `login` (que puede hacer fetch o igualmente buscar
-        // en otra fuente según la implementación de AuthContext).
-        await login(username.trim(), password);
-      }
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace("/form");
-    } catch (e: any) {
-      setError(e.message || "Error al iniciar sesión");
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
+    const data = await response.json();
+    
+    // Guarda el token o datos del usuario según lo que devuelva el endpoint
+    await login(username.trim(), password, data);
+    
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.replace("/form");
+  } catch (e: any) {
+    setError(e.message || "Error al iniciar sesión");
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const topPadding =
     Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
