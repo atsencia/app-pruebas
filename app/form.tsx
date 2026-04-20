@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Platform,
+  Platform, 
   ScrollView,
   Alert,
   Animated,
@@ -25,6 +25,8 @@ import PhotoPickerSection from "@/components/PhotoPickerSection";
 import VideoPickerSection from "@/components/VideoPickerSection";
 import ToggleField from "@/components/ToggleField";
 import Colors from "@/constants/colors";
+import { useLocalSearchParams } from "expo-router";
+
 
 const C           = Colors.light;
 const SIDEBAR_WIDTH = 260;
@@ -110,8 +112,9 @@ export interface FormData {
   observacionesProfesional: string;
 
   // ── Multimedia ────────────────────────────
-  fotos:        string[];        // fotos generales (URIs)
-  fotosFachada: string[];        // ← NUEVO: fotos específicas de la fachada
+  // En FormData
+  fotos:        { uri: string; descripcion: string }[];
+  fotosFachada: { uri: string; descripcion: string }[];        // ← NUEVO: fotos específicas de la fachada
   videos:       VideoItem[];
 }
 
@@ -163,13 +166,113 @@ const SIDEBAR_ITEMS: { icon: any; label: string; route: string; description: str
 // ─────────────────────────────────────────────
 
 export default function FormScreen() {
+
+  const { registro_uuid } = useLocalSearchParams<{ registro_uuid?: string }>();
+  const isEditing = !!registro_uuid;
+  const [loadingActa, setLoadingActa] = useState(false);
+
+
+  // Carga el acta si viene en modo edición
+ 
+
+
   const insets           = useSafeAreaInsets();
   const { user, logout } = useAuth();
 
   // ── Sidebar ──────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  useEffect(() => {
+    if (!registro_uuid) return;
+    
+    const cargarActa = async () => {
+      setLoadingActa(true);
+      try {
+        const response = await fetch(
+          `https://187.33.154.112.sslip.io/api/registros/${registro_uuid}/acta`,
+          {
+            headers: { "Authorization": `Bearer ${user?.token}` }
+          }
+        );
+        if (!response.ok) throw new Error("No se pudo cargar el acta");
+        const data = await response.json();
+        console.log("[EDITAR] Respuesta del servidor:", JSON.stringify(data, null, 2));
+        const f = data.acta;
+        console.log("[EDITAR] Campos encontrados:", Object.keys(f));
+
+        // Mapea los campos al estado del form
+        setForm((prev) => ({
+          ...prev,
+          tipoActa:    f.tipoActa    ?? prev.tipoActa,
+          nombre:      f.nombre      ?? prev.nombre,
+          cedula:      f.cedula      ?? prev.cedula,
+          direccion:   f.direccion   ?? prev.direccion,
+          telefono:    f.telefono    ?? prev.telefono,
+          propCorreo:  f.firmaPropietario?.correo ?? prev.propCorreo,
+          interCorreo: f.firmaInterventoria?.correo ?? prev.interCorreo,
+          latitud:  f.georef?.latitud  ?? f.latitud  ?? prev.latitud,
+          longitud: f.georef?.longitud ?? f.longitud ?? prev.longitud,
+          numeroPisos: f.numeroPisos ?? prev.numeroPisos,
+          estrato:     f.estrato     ?? prev.estrato,
+          anioConstruccion: f.anioConstruccion ?? prev.anioConstruccion,
+          longitudFrenteYFondo: f.longitudFrenteYFondo ?? prev.longitudFrenteYFondo,
+          estaOcupada: f.estaOcupada ?? prev.estaOcupada,
+          servicioAgua: f.servicioAgua ?? prev.servicioAgua,
+          servicioAlcantarillado: f.servicioAlcantarillado ?? prev.servicioAlcantarillado,
+          servicioEnergia: f.servicioEnergia ?? prev.servicioEnergia,
+          servicioTelefono: f.servicioTelefono ?? prev.servicioTelefono,
+          servicioGas: f.servicioGas ?? prev.servicioGas,
+          servicioOtros: f.servicioOtros ?? prev.servicioOtros,
+          tieneGaraje: f.tieneGaraje ?? prev.tieneGaraje,
+          cantidadGarajes: f.cantidadGarajes ?? prev.cantidadGarajes,
+          anchoAccesoVehicular: f.anchoAccesoVehicular ?? prev.anchoAccesoVehicular,
+          fisurasCerradas: f.fisurasCerradas ?? prev.fisurasCerradas,
+          fisurasCerradasDesc: f.fisurasCerradasDesc ?? prev.fisurasCerradasDesc,
+          fisurasAbiertas: f.fisurasAbiertas ?? prev.fisurasAbiertas,
+          fisurasAbiertasDesc: f.fisurasAbiertasDesc ?? prev.fisurasAbiertasDesc,
+          grietas: f.grietas ?? prev.grietas,
+          grietasDesc: f.grietasDesc ?? prev.grietasDesc,
+          acabadosPisos: f.acabadosPisos ?? prev.acabadosPisos,
+          estadoFachada: f.estadoFachada ?? prev.estadoFachada,
+          verticalidad: f.verticalidad ?? prev.verticalidad,
+          verticalidadNotas: f.verticalidadNotas ?? prev.verticalidadNotas,
+          planTopografico: f.planTopografico ?? prev.planTopografico,
+          observacionesProfesional: f.observacionesProfesional ?? prev.observacionesProfesional,
+          firmaConcesionario: f.firmaConcesionario ?? prev.firmaConcesionario,
+          firmaProfesional: f.firmaProfesional ?? prev.firmaProfesional,
+      // Multimedia desde el servidor
+        fotos: data.multimedia?.fotos?.map((f: any) => ({
+          uri: f.url,
+          descripcion: f.descripcion ?? "",
+        })) ?? prev.fotos,
+
+        fotosFachada: data.multimedia?.fotosFachada?.map((f: any) => ({
+          uri: f.url,
+          descripcion: f.descripcion ?? "",
+        })) ?? prev.fotosFachada,
+
+        videos: data.multimedia?.videos?.map((v: any) => ({
+          uri: v.url,
+          thumbnail: null,
+          duration: null,
+          filename: v.nombre,
+        })) ?? prev.videos,
+        }));
+      } catch (e: any) {
+        console.error("[EDITAR] Error:", e);
+        Alert.alert("Error", "No se pudo cargar el acta para editar");
+      } finally {
+        setLoadingActa(false);
+      }
+    };
+
+    cargarActa();
+  }, [registro_uuid, user?.token]);
+  
   const sidebarAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
+
+
+  
   const openSidebar = () => {
     setSidebarOpen(true);
     Animated.spring(sidebarAnim, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
@@ -192,6 +295,7 @@ export default function FormScreen() {
     interCorreo: "",
     firmaConcesionario: { nombre: "", cedula: "", cargo: "", firma: null },
     firmaProfesional:   { nombre: "", cedula: "", cargo: "", firma: null },
+    
     latitud: null, longitud: null,
     longitudFrenteYFondo: "", numeroPisos: "", estrato: "", anioConstruccion: "",
     estaOcupada: false,
@@ -323,10 +427,11 @@ export default function FormScreen() {
           apellido: form.cedula.trim(), // o el valor correcto que quieras usar
           direccion: form.direccion.trim(),
           georef:    { latitud: form.latitud, longitud: form.longitud },
-          fotos:        form.fotos.map((uri) => ({ uri })),
-          fotosFachada: form.fotosFachada.map((uri) => ({ uri })),  // ← NUEVO
+          fotos:        form.fotos,        // ya son objetos { uri, descripcion }
+          fotosFachada: form.fotosFachada,  // ← NUEVO
           videos:       form.videos.map((v) => ({ uri: v.uri })),
           extra:        buildDatos(),
+          registro_uuid: isEditing ? registro_uuid : undefined, // ← nuevo
         },
         (porcentaje: any, mensaje: any) => console.log(`[FTP] ${porcentaje}% — ${mensaje}`)
       );
@@ -354,6 +459,7 @@ export default function FormScreen() {
 
   // ── Render ──────────────────────────────────
   return (
+    
     <View style={[styles.root, { backgroundColor: C.background }]}>
 
       {/* TOP BAR */}
@@ -366,7 +472,9 @@ export default function FormScreen() {
           <Feather name="menu" size={20} color="#fff" />
         </Pressable>
         <View style={styles.topBarCenter}>
-          <Text style={styles.topBarTitle}>Nuevo Registro</Text>
+          <Text style={styles.topBarTitle}>
+            {isEditing ? "Editar Registro" : "Nuevo Registro"}
+          </Text>
           <Text style={styles.topBarSub}>Operador: {user?.username}</Text>
         </View>
         <Pressable
@@ -377,6 +485,8 @@ export default function FormScreen() {
           <Feather name="log-out" size={18} color="#fff" />
         </Pressable>
       </View>
+
+      
 
       {/* FORMULARIO */}
       <ScrollView
@@ -949,9 +1059,29 @@ export default function FormScreen() {
             <Text style={styles.uploadNoteText}>
 
       Los archivos se depositarán en el servidor FTP en /uploads/[ID del registro]            
-</Text>
+        </Text>
           </View>
         </View>
+     {/* Justo antes del botón ENVIAR, agrega: */}
+        {Object.keys(errors).length > 0 && (
+          <View style={styles.errorSummary}>
+            <View style={styles.errorSummaryHeader}>
+              <Feather name="alert-circle" size={16} color="#E53E3E" />
+              <Text style={styles.errorSummaryTitle}>
+                Hay {Object.keys(errors).length} campo{Object.keys(errors).length > 1 ? 's' : ''} con error
+              </Text>
+            </View>
+            {errors.nombre && (
+              <Text style={styles.errorSummaryItem}>• Nombre: {errors.nombre}</Text>
+            )}
+            {errors.cedula && (
+              <Text style={styles.errorSummaryItem}>• Cédula: {errors.cedula}</Text>
+            )}
+            {errors.direccion && (
+              <Text style={styles.errorSummaryItem}>• Dirección: {errors.direccion}</Text>
+            )}
+          </View>
+        )}
 
         {/* ENVIAR */}
         <Pressable
@@ -967,8 +1097,10 @@ export default function FormScreen() {
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <>
-              <Feather name="upload-cloud" size={18} color="#fff" />
-              <Text style={styles.submitText}>Enviar Registro</Text>
+               <Feather name={isEditing ? "edit-2" : "upload-cloud"} size={18} color="#fff" />
+                <Text style={styles.submitText}>
+                  {isEditing ? "Guardar Cambios" : "Enviar Registro"}
+                </Text>
             </>
           )}
         </Pressable>
@@ -1060,6 +1192,18 @@ export default function FormScreen() {
         </View>
       </Animated.View>
 
+        {loadingActa && (
+          <View style={{
+            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: "rgba(255,255,255,0.85)", zIndex: 50,
+            justifyContent: "center", alignItems: "center", gap: 12,
+          }}>
+            <ActivityIndicator size="large" color={C.primary} />
+            <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: C.textSecondary }}>
+              Cargando datos del registro...
+            </Text>
+          </View>
+        )}
     </View>
   );
 }
@@ -1322,4 +1466,28 @@ const styles = StyleSheet.create({
   sidebarUserName:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.text },
   sidebarUserRole:       { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
   sidebarLogoutBtn:      { width: 32, height: 32, borderRadius: 9, backgroundColor: C.error + "15", justifyContent: "center", alignItems: "center" },
+  errorSummary: {
+  backgroundColor: "#FFF5F5",
+  borderRadius: 14,
+  padding: 16,
+  borderWidth: 1.5,
+  borderColor: "#FEB2B2",
+  gap: 8,
+},
+errorSummaryHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 8,
+},
+errorSummaryTitle: {
+  fontSize: 14,
+  fontFamily: "Inter_600SemiBold",
+  color: "#E53E3E",
+},
+errorSummaryItem: {
+  fontSize: 13,
+  fontFamily: "Inter_400Regular",
+  color: "#C53030",
+  paddingLeft: 4,
+},
 });

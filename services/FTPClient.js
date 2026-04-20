@@ -330,13 +330,14 @@ export default class FTPClient {
         log(`Escribiendo ${totalBytes} bytes en socket de datos...`);
         try {
           socket.write(buffer); // sin callback — no es confiable en react-native-tcp-socket
+        const delayMs = Math.max(500, Math.ceil(totalBytes / 1024) * 2); // ~2ms por KB, mínimo 500ms
 
           setTimeout(() => {
             log(`Cerrando socket de datos...`);
             if (typeof onProgreso === 'function') onProgreso(totalBytes, totalBytes);
             socket.end();
             resolve();
-          }, 500);
+          }, delayMs);
 
         } catch (err) {
           socket.destroy();
@@ -361,12 +362,14 @@ export default class FTPClient {
 
       const enviarChunk = async () => {
         if (offsetBytes >= totalBytes) {
+          const delayMs = Math.max(500, Math.ceil(totalBytes / 1024) * 2);
+
           // Dar margen para que el buffer de red se vacíe antes de cerrar
           setTimeout(() => {
             log(`Todos los chunks enviados (${bytesSent} bytes), cerrando socket...`);
             socket.end();
             resolve();
-          }, 500);
+          }, delayMs);
           return;
         }
 

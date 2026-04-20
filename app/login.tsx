@@ -34,12 +34,13 @@ export default function LoginScreen() {
   const handleLogin = async () => {
   if (!username.trim() || !password.trim()) {
     setError("Por favor complete todos los campos");
+    
     return;
   }
   setError("");
   setIsLoading(true);
   try {
-    const response = await fetch("http://187.33.154.112:3000/logueo/auth/login", {
+    const response = await fetch("https://187.33.154.112.sslip.io/logueo/auth/login", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

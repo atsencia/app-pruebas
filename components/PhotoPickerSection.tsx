@@ -17,9 +17,10 @@ import Colors from "@/constants/colors";
 const C = Colors.light;
 const MAX_PHOTOS = 6;
 
+// PhotoPickerSection.tsx — cambiar la interfaz
 interface Props {
-  photos: string[];
-  onPhotosChange: (photos: string[]) => void;
+  photos: { uri: string; descripcion: string }[];  // era: string[]
+  onPhotosChange: (photos: { uri: string; descripcion: string }[]) => void;
 }
 
 export default function PhotoPickerSection({ photos, onPhotosChange }: Props) {
@@ -57,8 +58,8 @@ export default function PhotoPickerSection({ photos, onPhotosChange }: Props) {
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      const newUris = result.assets.map((a) => a.uri);
-      onPhotosChange([...photos, ...newUris].slice(0, MAX_PHOTOS));
+      const nuevasFotos = result.assets.map((a) => ({ uri: a.uri, descripcion: "" }));
+      onPhotosChange([...photos, ...nuevasFotos].slice(0, MAX_PHOTOS));
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
@@ -87,7 +88,7 @@ export default function PhotoPickerSection({ photos, onPhotosChange }: Props) {
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      onPhotosChange([...photos, result.assets[0].uri]);
+      onPhotosChange([...photos, { uri: result.assets[0].uri, descripcion: "" }]);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
   };
@@ -116,7 +117,7 @@ export default function PhotoPickerSection({ photos, onPhotosChange }: Props) {
         <View style={styles.grid}>
           {photos.map((uri, index) => (
             <View key={index} style={styles.photoWrapper}>
-              <Image source={{ uri }} style={styles.photo} resizeMode="cover" />
+             <Image source={{ uri: photos[index].uri }} style={styles.photo} resizeMode="cover" />
               <Pressable
                 style={styles.removeBtn}
                 onPress={() => removePhoto(index)}
