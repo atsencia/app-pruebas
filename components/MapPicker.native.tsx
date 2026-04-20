@@ -15,8 +15,9 @@ interface Props {
 export default function MapPicker({ latitud, longitud, onLocationChange }: Props) {
 
  
-  const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "granted" | "denied">("idle");
-
+const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "granted" | "denied">(
+  latitud !== null && longitud !== null ? "granted" : "idle"
+);
 const requestLocation = async () => {
   setLocationStatus("loading");
   try {

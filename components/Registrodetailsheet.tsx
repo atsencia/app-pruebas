@@ -13,6 +13,7 @@ import * as Haptics from "expo-haptics";
 import type { Registro } from "@/app/search";
 // import { getApiUrl } from "@/lib/query-client"; // descomenta cuando uses fetch real
 import { useAuth } from "@/contexts/AuthContext";
+import { router } from "expo-router";
 
 interface Props {
   visible: boolean;
@@ -41,7 +42,7 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
 
     try {
       const response = await fetch(
-        `http://187.33.154.112:3000/api/registros/${registro.registro_uuid}/enviar-firma`,
+        `https://187.33.154.112.sslip.io/api/registros/${registro.registro_uuid}/enviar-firma`,
         {
           method: "POST",
           headers: {
@@ -191,8 +192,14 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
                       text: "Editar",
                       onPress: () => {
                         onClose();
-                        // router.push(`/editarActa/${registro?.registro_uuid}`); // descomenta cuando tengas la pantalla
-                      },
+                        // Navega pasando el uuid como parámetro
+                        setTimeout(() => {
+                          router.push({
+                            pathname: "/form",
+                            params: { registro_uuid: registro?.registro_uuid }
+                          });
+                        }, 300);
+},
                     },
                   ]
                 );
