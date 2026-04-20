@@ -10,7 +10,9 @@ import * as SecureStore from "expo-secure-store";
 
 interface User {
   username: string;
+  nombre?: string;
   token?: string;
+  isAdmin?: boolean;
 }
 
 interface AuthContextValue {
@@ -23,18 +25,23 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const TOKEN_KEY = "auth_token";
+const USER_KEY  = "auth_user";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Al arrancar, recupera el token guardado
+  // Al arrancar, recupera sesión guardada
   useEffect(() => {
-    const loadToken = async () => {
+    const loadSession = async () => {
       try {
-        const token = await SecureStore.getItemAsync(TOKEN_KEY);
-        if (token) {
-          setUser({ username: "usuario", token });
+        const [token, userJson] = await Promise.all([
+          SecureStore.getItemAsync(TOKEN_KEY),
+          SecureStore.getItemAsync(USER_KEY),
+        ]);
+        if (token && userJson) {
+          const savedUser = JSON.parse(userJson);
+          setUser({ ...savedUser, token });
         }
       } catch {
         setUser(null);
@@ -42,22 +49,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       }
     };
-    loadToken();
+    loadSession();
   }, []);
 
   const login = async (documento: string, password: string, data?: any) => {
     if (data) {
-      const token = data.token || data.accessToken || data.access_token;
-      if (token) {
-        await SecureStore.setItemAsync(TOKEN_KEY, token);
-      }
-      setUser({
-        username: data.username || data.nombre || data.documento || documento,
+      const token   = data.token || data.accessToken || data.access_token;
+      const nombre  = data.usuario?.nombre  || data.nombre  || documento;
+      const isAdmin = data.usuario?.is_admin === 1 || data.is_admin === 1;
+
+      const newUser: User = {
+        username: data.usuario?.documento || documento,
+        nombre,
         token,
-      });
+        isAdmin,
+      };
+
+      if (token) await SecureStore.setItemAsync(TOKEN_KEY, token);
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(newUser));
+      setUser(newUser);
       return;
     }
 
+    // Fallback fetch directo
     const response = await fetch("http://187.33.154.112:3000/logueo/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -70,16 +84,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const result = await response.json();
-    const token = result.token || result.accessToken || result.access_token;
+    const token   = result.token || result.accessToken || result.access_token;
+    const nombre  = result.usuario?.nombre  || result.nombre  || documento;
+    const isAdmin = result.usuario?.is_admin === 1;
 
-    if (token) {
-      await SecureStore.setItemAsync(TOKEN_KEY, token);
-    }
-
-    setUser({
-      username: result.username || result.nombre || result.documento || documento,
+    const newUser: User = {
+      username: result.usuario?.documento || documento,
+      nombre,
       token,
-    });
+      isAdmin,
+    };
+
+    if (token) await SecureStore.setItemAsync(TOKEN_KEY, token);
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(newUser));
+    setUser(newUser);
   };
 
   const loginLocal = (username: string) => {
@@ -87,7 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await Promise.all([
+      SecureStore.deleteItemAsync(TOKEN_KEY),
+      SecureStore.deleteItemAsync(USER_KEY),
+    ]);
     setUser(null);
   };
 

@@ -1042,11 +1042,11 @@ export default function FormScreen() {
           <View style={styles.sidebarUserRow}>
             <View style={styles.sidebarUserAvatar}>
               <Text style={styles.sidebarUserAvatarText}>
-                {user?.username?.charAt(0).toUpperCase() ?? "U"}
-              </Text>
+              {(user?.nombre ?? user?.username)?.charAt(0).toUpperCase() ?? "U"}
+            </Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.sidebarUserName}>{user?.username}</Text>
+            <Text style={styles.sidebarUserName}>{user?.nombre ?? user?.username}</Text>
               <Text style={styles.sidebarUserRole}>Operador</Text>
             </View>
             <Pressable
