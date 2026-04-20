@@ -173,6 +173,34 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
               {sending === "inter" ? "Enviando..." : "Enviar link a interventoría"}
             </Text>
           </Pressable>
+
+          {/* Botón editar acta */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.btnEditar,
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={() => {
+                Alert.alert(
+                  "¿Editar esta acta?",
+                  "Se abrirá el formulario con los datos del registro para que puedas modificarlos.",
+                  [
+                    { text: "Cancelar", style: "cancel" },
+                    {
+                      text: "Editar",
+                      onPress: () => {
+                        onClose();
+                        // router.push(`/editarActa/${registro?.registro_uuid}`); // descomenta cuando tengas la pantalla
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Feather name="edit-2" size={16} color="#374151" />
+              <Text style={styles.btnEditarText}>Editar acta</Text>
+            </Pressable>
         </View>
       </View>
     </Modal>
@@ -324,4 +352,14 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: "#1a3a6b",
   },
+  btnEditar: {
+  backgroundColor: "#F9FAFB",
+  borderWidth: 0.5,
+  borderColor: "#D1D5DB",
+},
+btnEditarText: {
+  fontSize: 14,
+  fontFamily: "Inter_600SemiBold",
+  color: "#374151",
+},
 });
