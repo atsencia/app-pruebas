@@ -12,6 +12,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import type { Registro } from "@/app/search";
 // import { getApiUrl } from "@/lib/query-client"; // descomenta cuando uses fetch real
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Props {
   visible: boolean;
@@ -26,54 +27,58 @@ const TIPO_CONFIG = {
 };
 
 export default function RegistroDetailSheet({ visible, registro, onClose }: Props) {
+    const { user } = useAuth();
+
   const [sending, setSending] = React.useState<"prop" | "inter" | null>(null);
 
   const handleEnviar = useCallback(
-    async (firmante: "propietario" | "interventoria") => {
-      if (!registro) return;
+  async (firmante: "propietario" | "interventoria") => {
+    if (!registro) return;
 
-      const key = firmante === "propietario" ? "prop" : "inter";
-      setSending(key);
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const key = firmante === "propietario" ? "prop" : "inter";
+    setSending(key);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      try {
-        // ── Cuando tengas el backend, reemplaza el timeout por esto: ──
-        // const res = await fetch(
-        //   `${getApiUrl()}/api/registros/${registro.carpeta}/enviar-firma`,
-        //   {
-        //     method: "POST",
-        //     headers: { "Content-Type": "application/json" },
-        //     credentials: "include",
-        //     body: JSON.stringify({ firmante }),
-        //   }
-        // );
-        // if (!res.ok) throw new Error("Error al enviar");
+    try {
+      const response = await fetch(
+        `http://187.33.154.112:3000/api/registros/${registro.registro_uuid}/enviar-firma`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${user?.token}`,
+          },
+          body: JSON.stringify({ firmante }),
+        }
+      );
 
-        await new Promise((r) => setTimeout(r, 1200)); // simula delay
-
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        const correo =
-          firmante === "propietario" ? registro.propCorreo : registro.interCorreo;
-        Alert.alert(
-          "Link enviado",
-          `El link de firma fue enviado a:\n${correo}`,
-          [{ text: "Ok", onPress: onClose }]
-        );
-      } catch (e: any) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Alert.alert("Error", e.message || "No se pudo enviar el link");
-      } finally {
-        setSending(null);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || "Error al enviar el link");
       }
-    },
-    [registro, onClose]
-  );
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const correo = firmante === "propietario" ? registro.prop_correo : registro.inter_correo;
+      Alert.alert(
+        "Link enviado",
+        `El link de firma fue enviado a:\n${correo ?? "correo no registrado"}`,
+        [{ text: "Ok", onPress: onClose }]
+      );
+    } catch (e: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Error", e.message || "No se pudo enviar el link");
+    } finally {
+      setSending(null);
+    }
+  },
+  [registro, onClose, user?.token]
+    );
 
   if (!registro) return null;
 
   const tipo =
-    TIPO_CONFIG[registro.tipoActa as keyof typeof TIPO_CONFIG] ?? {
-      label: registro.tipoActa,
+    TIPO_CONFIG[registro.tipo_acta as keyof typeof TIPO_CONFIG] ?? {
+      label: registro.tipo_acta,
       bg: "#F3F4F6",
       text: "#374151",
     };
@@ -121,16 +126,9 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
           value={registro.carpeta}
           mono
         />
-        <InfoRow
-          icon="mail"
-          label="Correo prop."
-          value={registro.propCorreo}
-        />
-        <InfoRow
-          icon="mail"
-          label="Correo inter."
-          value={registro.interCorreo}
-        />
+        <InfoRow icon="mail" label="Correo prop." value={registro.prop_correo ?? "No registrado"} />
+
+        <InfoRow icon="mail" label="Correo inter." value={registro.inter_correo ?? "No registrado"} />
 
         <View style={styles.divider} />
 
