@@ -42,7 +42,7 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
 
     try {
       const response = await fetch(
-        `https://187.33.154.112.sslip.io/api/registros/${registro.registro_uuid}/enviar-firma`,
+        `https://187.33.154.112.sslip.io/backend/api/registros/${registro.registro_uuid}/enviar-firma`,
         {
           method: "POST",
           headers: {

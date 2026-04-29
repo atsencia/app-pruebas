@@ -57,7 +57,7 @@ export default function SearchScreen() {
     setLoading(true);
     setError(null);
     try {
-      const url = `https://187.33.154.112.sslip.io/api/registros/buscar?q=${encodeURIComponent(q)}`;
+      const url = `https://187.33.154.112.sslip.io/backend/api/registros/buscar?q=${encodeURIComponent(q)}`;
       const response = await fetch(url, {
         method: "GET",
         headers: {

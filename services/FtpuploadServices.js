@@ -22,7 +22,6 @@ function extDeURI(uri, fallback = 'jpg') {
   return match ? match[1].toLowerCase() : fallback;
 }
 
-// ← MOVIDA AQUÍ ARRIBA para que esté disponible en todo el archivo
 const esURILocal = (uri) =>
   uri.startsWith('file://') ||
   uri.startsWith('content://') ||
@@ -30,18 +29,21 @@ const esURILocal = (uri) =>
 
 async function base64AArchivoTemp(base64, nombre) {
   let datos = base64;
+
   const commaIndex = base64.indexOf(',');
   if (commaIndex !== -1) {
-    datos = base64.substring(commaIndex + 1);
+    datos = base64.slice(commaIndex + 1);
   }
-  datos = datos.replace(/\s/g, '');
-  if (!datos || datos.length === 0) {
-    throw new Error('La firma está vacía o en formato inválido');
-  }
+
   const uri = `${FileSystem.cacheDirectory}${nombre}`;
+
   await FileSystem.writeAsStringAsync(uri, datos, {
     encoding: FileSystem.EncodingType.Base64,
   });
+
+  datos = null;
+  base64 = null;
+
   return uri;
 }
 
@@ -85,6 +87,7 @@ async function construirListaMultimedia(formulario) {
         nombreRemoto: 'firma_concesionario.png',
         categoria:    'firmas',
         descripcion:  'Firma del representante delegado concesionario',
+        esTemporal:   !firmaConcRaw.startsWith('file://'), // flag para limpieza
       });
     }
   }
@@ -103,6 +106,7 @@ async function construirListaMultimedia(formulario) {
         nombreRemoto: 'firma_profesional.png',
         categoria:    'firmas',
         descripcion:  'Firma del profesional técnico',
+        esTemporal:   !firmaProfRaw.startsWith('file://'), // flag para limpieza
       });
     }
   }
@@ -132,12 +136,11 @@ function construirDatosJSON(id, formulario, listaMultimedia, archivosRemotos = {
     return firmaRaw;
   };
 
-  const firmaConcItem  = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_concesionario'));
-  const firmaProfItem  = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_profesional'));
+  const firmaConcItem   = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_concesionario'));
+  const firmaProfItem   = listaMultimedia.find(a => a.categoria === 'firmas' && a.nombreRemoto.startsWith('firma_profesional'));
   const firmaConcNombre = firmaConcItem ? firmaConcItem.nombreRemoto : null;
   const firmaProfNombre = firmaProfItem ? firmaProfItem.nombreRemoto : null;
 
-  // ← CORREGIDO: combina remotos + nuevos correctamente
   const agrupar = (cat) => [
     ...(archivosRemotos[cat] || []),
     ...listaMultimedia
@@ -178,7 +181,17 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
   const carpeta = `${FTP_CONFIG.baseDir}/${id}`;
   const ftp     = new FTPClient(FTP_CONFIG);
 
-  // Archivos remotos existentes (ya están en el servidor, no se suben)
+  // Limpiar base64 en memoria antes de construir la lista
+  // (evita serializar datos pesados accidentalmente)
+  if (formulario.extra?.firmaConcesionario?.firma?.startsWith('data:')) {
+    formulario.extra.firmaConcesionario.firma =
+      formulario.extra.firmaConcesionario.firma; // se resolverá vía base64AArchivoTemp
+  }
+  if (formulario.extra?.firmaProfesional?.firma?.startsWith('data:')) {
+    formulario.extra.firmaProfesional.firma =
+      formulario.extra.firmaProfesional.firma;
+  }
+
   const archivosRemotos = {
     fotos: (formulario.fotos || [])
       .filter(f => !esURILocal(f.uri))
@@ -200,6 +213,8 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
       })),
   };
 
+  let listaMultimedia = [];
+
   try {
     onProgreso(5, 'Conectando al servidor FTP...');
     await ftp.connect();
@@ -207,7 +222,7 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
     await ftp.crearDirectorio(carpeta);
 
     onProgreso(10, 'Preparando archivos...');
-    const listaMultimedia = await construirListaMultimedia(formulario);
+    listaMultimedia = await construirListaMultimedia(formulario);
 
     onProgreso(15, 'Subiendo datos.json...');
     const datosJSON = construirDatosJSON(id, formulario, listaMultimedia, archivosRemotos);
@@ -223,7 +238,9 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
       const item       = listaMultimedia[i];
       const rutaRemota = `${carpeta}/${item.nombreRemoto}`;
       const basePct    = 25 + Math.round((i / total) * 65);
+
       onProgreso(basePct, `Subiendo ${item.categoria} (${i + 1}/${total}): ${item.nombreRemoto}`);
+
       await ftp.subirArchivoDesdeURI(
         item.uriLocal,
         rutaRemota,
@@ -232,6 +249,11 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
           onProgreso(pct, `${item.nombreRemoto}: ${Math.round((sent / totalBytes) * 100)}%`);
         }
       );
+
+      // Limpiar archivo temporal de caché una vez subido
+      if (item.esTemporal) {
+        await FileSystem.deleteAsync(item.uriLocal, { idempotent: true });
+      }
     }
 
     onProgreso(92, 'Marcando registro como completo...');
@@ -248,6 +270,14 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
   } catch (error) {
     console.error('[FTPUpload] Error:', error);
     try { await ftp.disconnect(); } catch (_) {}
+
+    // Limpieza de temporales aunque falle la subida
+    for (const item of listaMultimedia) {
+      if (item.esTemporal) {
+        await FileSystem.deleteAsync(item.uriLocal, { idempotent: true }).catch(() => {});
+      }
+    }
+
     return { success: false, id, mensaje: error.message };
   }
 }
