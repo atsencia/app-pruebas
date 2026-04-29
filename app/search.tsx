@@ -41,6 +41,7 @@ export type Registro = {
 };
 
 export default function SearchScreen() {
+  const [modoDevueltas, setModoDevueltas] = useState(false);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
@@ -87,14 +88,44 @@ export default function SearchScreen() {
     }
   }, [user?.token, filtro]);
 
+
+  const fetchDevueltas = useCallback(async () => {
+  setLoading(true);
+  setError(null);
+  try {
+    const url = `https://187.33.154.112.sslip.io/backend/api/registros/devueltos`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${user?.token}`,
+      },
+    });
+    if (!response.ok) throw new Error("Error al obtener devueltas");
+    const data = await response.json();
+    setResultados(data.data ?? []);
+  } catch (e: any) {
+    setError(e.message || "No se pudo conectar");
+    setResultados([]);
+  } finally {
+    setLoading(false);
+  }
+}, [user?.token]);
+
+
   // Debounce de 2 segundos
   useEffect(() => {
+
+      if (modoDevueltas) {
+    fetchDevueltas();
+    return;
+  }
     const timer = setTimeout(() => {
       fetchRegistros(query);
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [query, filtro, fetchRegistros]);
+}, [query, filtro, fetchRegistros, modoDevueltas, fetchDevueltas]);
 
   const handleEnviarLink = (registro: Registro) => {
     setSelected(registro);
@@ -102,6 +133,7 @@ export default function SearchScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  
   return (
     <View style={[styles.root, { backgroundColor: C.background }]}>
       {/* Top bar */}
@@ -183,6 +215,27 @@ export default function SearchScreen() {
         </Text>
       </View>
 
+
+
+{/* Botón Actas Devueltas */}
+<View style={styles.devueltasRow}>
+  <Pressable
+    style={[styles.btnDevueltas, modoDevueltas && styles.btnDevueltasActive]}
+    onPress={() => {
+      setModoDevueltas(!modoDevueltas);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }}
+  >
+    <Feather
+      name="rotate-ccw"
+      size={13}
+      color={modoDevueltas ? "#fff" : "#D97706"}
+    />
+    <Text style={[styles.btnDevueltasText, modoDevueltas && styles.btnDevueltasTextActive]}>
+      Actas devueltas
+    </Text>
+  </Pressable>
+</View>
       {/* Lista */}
       <FlatList
         data={resultados}
@@ -271,4 +324,35 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 32 },
   empty: { alignItems: "center", paddingVertical: 48 },
   emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#9CA3AF", textAlign: "center" },
+  devueltasRow: {
+  backgroundColor: "#fff",
+  paddingHorizontal: 16,
+  paddingVertical: 8,
+  borderBottomWidth: 0.5,
+  borderBottomColor: "#E5E7EB",
+},
+btnDevueltas: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 6,
+  alignSelf: "flex-start",
+  borderWidth: 1,
+  borderColor: "#D97706",
+  borderRadius: 20,
+  paddingHorizontal: 14,
+  paddingVertical: 6,
+  backgroundColor: "#FFF7ED",
+},
+btnDevueltasActive: {
+  backgroundColor: "#D97706",
+  borderColor: "#D97706",
+},
+btnDevueltasText: {
+  fontSize: 12,
+  fontFamily: "Inter_500Medium",
+  color: "#D97706",
+},
+btnDevueltasTextActive: {
+  color: "#fff",
+},
 });
