@@ -160,7 +160,7 @@ const ROLES: { value: Rol; label: string }[] = [
 
   setLoading(true);
   try {
-    const response = await fetch("https://187.33.154.112.sslip.io/api/users", {
+    const response = await fetch("https://187.33.154.112.sslip.io/backend/api/users", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

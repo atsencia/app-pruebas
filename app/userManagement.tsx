@@ -49,7 +49,7 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-const API = "https://187.33.154.112.sslip.io/api/users";
+const API = "https://187.33.154.112.sslip.io/backend/api/users";
 
 export default function UsersManagementScreen() {
   const { user } = useAuth();

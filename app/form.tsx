@@ -188,7 +188,7 @@ export default function FormScreen() {
       setLoadingActa(true);
       try {
         const response = await fetch(
-          `https://187.33.154.112.sslip.io/api/registros/${registro_uuid}/acta`,
+          `https://187.33.154.112.sslip.io/backend/api/registros/${registro_uuid}/acta`,
           {
             headers: { "Authorization": `Bearer ${user?.token}` }
           }

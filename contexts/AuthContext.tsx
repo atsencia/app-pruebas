@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Fallback fetch directo
-    const response = await fetch("https://187.33.154.112.sslip.io/logueo/auth/login", {
+    const response = await fetch("https://187.33.154.112.sslip.io/backend/logueo/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ documento, password }),
