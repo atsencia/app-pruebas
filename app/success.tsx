@@ -27,7 +27,7 @@ export default function SuccessScreen() {
   videosCount: string;
 }>();
 
-const actaUrl = `http://187.33.154.112:3000/acta.html?id=${numeroRegistro}`;
+const actaUrl = `http://187.33.154.112.sslip.io/backend/acta.html?id=${numeroRegistro}`;
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
