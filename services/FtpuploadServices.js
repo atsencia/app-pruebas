@@ -97,6 +97,15 @@ async function firmaAUriLocal(firmaRaw, nombreArchivo) {
     return await base64AArchivoTemp(firmaRaw, nombreArchivo);
   }
 
+  // Si es string de paths SVG (del SignaturePad)
+  if (typeof firmaRaw === 'string' && firmaRaw.includes('M') && !esBase64Valido(firmaRaw) && !esURLRemota(firmaRaw)) {
+    const paths = firmaRaw.split('|');
+    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">${paths.map(path => `<path d="${path}" stroke="#000" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}</svg>`;
+    const uri = `${FileSystem.cacheDirectory}${nombreArchivo.replace('.png', '.svg')}`;
+    await FileSystem.writeAsStringAsync(uri, svgContent, { encoding: FileSystem.EncodingType.UTF8 });
+    return uri;
+  }
+
   console.warn('⚠️ Firma no reconocida:', firmaRaw.slice(0, 80));
   return null;
 }
@@ -163,7 +172,7 @@ async function construirListaMultimedia(formulario) {
     if (!f.raw) continue;
 
     // Determinar extensión antes de resolver URI
-    const esSVG = f.raw.startsWith('<svg') || f.raw.startsWith('<?xml');
+    const esSVG = f.raw.startsWith('<svg') || f.raw.startsWith('<?xml') || (typeof f.raw === 'string' && f.raw.includes('M') && !esBase64Valido(f.raw) && !esURLRemota(f.raw));
     const ext = esSVG ? 'svg' : 'png';
     const nombreArchivo = `${f.nombre}.${ext}`;
 
