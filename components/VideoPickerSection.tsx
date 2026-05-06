@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+// components/VideoPickerSection.tsx
+import React from "react";
 import {
   View,
   Text,
@@ -6,7 +7,6 @@ import {
   Pressable,
   Alert,
   Platform,
-  Image,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
@@ -14,9 +14,8 @@ import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 
 const C = Colors.light;
-const MAX_VIDEOS = 3;
 
-interface VideoItem {
+export interface VideoItem {
   uri: string;
   thumbnail: string | null;
   duration: number | null;
@@ -37,89 +36,69 @@ function formatDuration(ms: number | null): string {
 }
 
 export default function VideoPickerSection({ videos, onVideosChange }: Props) {
-  const [cameraPermission, requestCameraPermission] =
-    ImagePicker.useCameraPermissions();
-  const [mediaPermission, requestMediaPermission] =
-    ImagePicker.useMediaLibraryPermissions();
+  const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
+  const [mediaPermission, requestMediaPermission] = ImagePicker.useMediaLibraryPermissions();
 
   const pickFromGallery = async () => {
-    if (videos.length >= MAX_VIDEOS) {
-      Alert.alert("Límite alcanzado", `Máximo ${MAX_VIDEOS} videos por registro.`);
-      return;
-    }
-
-    if (Platform.OS !== "web") {
-      if (!mediaPermission?.granted) {
-        const result = await requestMediaPermission();
-        if (!result.granted) {
-          Alert.alert(
-            "Permiso requerido",
-            "Se necesita acceso a la galería para seleccionar videos."
-          );
-          return;
-        }
+    if (Platform.OS !== "web" && !mediaPermission?.granted) {
+      const r = await requestMediaPermission();
+      if (!r.granted) {
+        Alert.alert("Permiso requerido", "Se necesita acceso a la galería.");
+        return;
       }
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-      allowsMultipleSelection: false,
-      quality: 0.7,
-      videoMaxDuration: 120,
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,   // ← Versión compatible
+      allowsMultipleSelection: true,
+      quality: 1,
     });
 
-    if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
-      const item: VideoItem = {
+    if (!result.canceled && result.assets?.length > 0) {
+      const nuevos = result.assets.map((asset) => ({
         uri: asset.uri,
         thumbnail: null,
         duration: asset.duration ?? null,
         filename: asset.fileName ?? `video_${Date.now()}.mp4`,
-      };
-      onVideosChange([...videos, item]);
+      }));
+
+      onVideosChange([...videos, ...nuevos]);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
 
   const pickFromCamera = async () => {
-    if (videos.length >= MAX_VIDEOS) {
-      Alert.alert("Límite alcanzado", `Máximo ${MAX_VIDEOS} videos por registro.`);
-      return;
-    }
-
     if (!cameraPermission?.granted) {
-      const result = await requestCameraPermission();
-      if (!result.granted) {
-        Alert.alert(
-          "Permiso requerido",
-          "Se necesita acceso a la cámara para grabar videos."
-        );
+      const r = await requestCameraPermission();
+      if (!r.granted) {
+        Alert.alert("Permiso requerido", "Se necesita la cámara.");
         return;
       }
     }
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-      videoMaxDuration: 120,
-      quality: 0.7,
+      allowsEditing: false,
+      quality: 0.8,
+      videoMaxDuration: 300,
     });
 
-    if (!result.canceled && result.assets.length > 0) {
+    if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
-      const item: VideoItem = {
+      const nuevo: VideoItem = {
         uri: asset.uri,
         thumbnail: null,
         duration: asset.duration ?? null,
         filename: asset.fileName ?? `video_${Date.now()}.mp4`,
       };
-      onVideosChange([...videos, item]);
+
+      onVideosChange([...videos, nuevo]);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
   };
 
   const removeVideo = async (index: number) => {
-    const updated = videos.filter((_, i) => i !== index);
-    onVideosChange(updated);
+    onVideosChange(videos.filter((_, i) => i !== index));
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -128,9 +107,9 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
       pickFromGallery();
       return;
     }
-    Alert.alert("Agregar video", "Selecciona el origen", [
-      { text: "Grabar con cámara", onPress: pickFromCamera },
-      { text: "Seleccionar de galería", onPress: pickFromGallery },
+    Alert.alert("Agregar Video", "Selecciona el origen", [
+      { text: "🎥 Grabar con Cámara", onPress: pickFromCamera },
+      { text: "📁 Galería", onPress: pickFromGallery },
       { text: "Cancelar", style: "cancel" },
     ]);
   };
@@ -149,6 +128,7 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
                   <Feather name="play" size={10} color="#fff" />
                 </View>
               </View>
+
               <View style={styles.videoInfo}>
                 <Text style={styles.videoFilename} numberOfLines={1}>
                   {video.filename}
@@ -166,11 +146,9 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
                   <Text style={styles.videoStatusText}>Listo</Text>
                 </View>
               </View>
+
               <Pressable
-                style={({ pressed }) => [
-                  styles.removeVideoBtn,
-                  pressed && { opacity: 0.6 },
-                ]}
+                style={styles.removeVideoBtn}
                 onPress={() => removeVideo(index)}
                 hitSlop={8}
               >
@@ -178,25 +156,18 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
               </Pressable>
             </View>
           ))}
-          {videos.length < MAX_VIDEOS && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.addMoreVideoBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-              onPress={showOptions}
-            >
-              <Feather name="plus" size={16} color={C.primary} />
-              <Text style={styles.addMoreVideoBtnText}>Agregar otro video</Text>
-            </Pressable>
-          )}
+
+          <Pressable
+            style={({ pressed }) => [styles.addMoreVideoBtn, pressed && { opacity: 0.7 }]}
+            onPress={showOptions}
+          >
+            <Feather name="plus" size={16} color={C.primary} />
+            <Text style={styles.addMoreVideoBtnText}>Agregar otro video</Text>
+          </Pressable>
         </View>
       ) : (
         <Pressable
-          style={({ pressed }) => [
-            styles.emptyBtn,
-            pressed && { opacity: 0.8 },
-          ]}
+          style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.8 }]}
           onPress={showOptions}
         >
           <View style={styles.emptyIconBg}>
@@ -204,7 +175,7 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
           </View>
           <Text style={styles.emptyTitle}>Sin videos</Text>
           <Text style={styles.emptySubtitle}>
-            Toca para grabar o seleccionar hasta {MAX_VIDEOS} videos (máx. 2 min c/u)
+            Toca para grabar o seleccionar videos
           </Text>
           <View style={styles.emptyActions}>
             <View style={styles.emptyChip}>
@@ -220,19 +191,16 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
       )}
 
       <Text style={styles.footerText}>
-        {videos.length}/{MAX_VIDEOS} videos agregados
+        {videos.length} video{videos.length !== 1 ? "s" : ""} agregados
       </Text>
     </View>
   );
 }
 
+/* ====================== STYLES ====================== */
 const styles = StyleSheet.create({
-  container: {
-    gap: 10,
-  },
-  videoList: {
-    gap: 10,
-  },
+  container: { gap: 10 },
+  videoList: { gap: 10 },
   videoCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -255,10 +223,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-  videoIconBg: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  videoIconBg: { justifyContent: "center", alignItems: "center" },
   playBadge: {
     position: "absolute",
     bottom: 4,
@@ -270,35 +235,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  videoInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  videoFilename: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: C.text,
-  },
-  videoDurationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  videoDuration: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-  },
-  videoStatusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  videoStatusText: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: C.accent,
-  },
+  videoInfo: { flex: 1, gap: 4 },
+  videoFilename: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.text },
+  videoDurationRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  videoDuration: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  videoStatusBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  videoStatusText: { fontSize: 11, fontFamily: "Inter_500Medium", color: C.accent },
   removeVideoBtn: {
     width: 32,
     height: 32,
@@ -308,7 +250,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
     borderWidth: 1,
     borderColor: "#FECACA",
-    flexShrink: 0,
   },
   addMoreVideoBtn: {
     flexDirection: "row",
@@ -322,11 +263,8 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     borderStyle: "dashed",
   },
-  addMoreVideoBtnText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: C.primary,
-  },
+  addMoreVideoBtnText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.primary },
+
   emptyBtn: {
     alignItems: "center",
     gap: 8,
@@ -345,11 +283,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  emptyTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: C.text,
-  },
+  emptyTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
   emptySubtitle: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
@@ -357,11 +291,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 20,
   },
-  emptyActions: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 4,
-  },
+  emptyActions: { flexDirection: "row", gap: 8, marginTop: 4 },
   emptyChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -373,14 +303,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-  emptyChipText: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: C.primary,
-  },
+  emptyChipText: { fontSize: 11, fontFamily: "Inter_500Medium", color: C.primary },
+
   footerText: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
     color: C.textSecondary,
+    textAlign: "center",
   },
 });

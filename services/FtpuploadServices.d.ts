@@ -7,6 +7,7 @@ export interface FTPFormulario {
   fotosFachada?: Array<{ uri: string; nombre?: string; descripcion?: string }>;
   videos?: Array<{ uri: string; nombre?: string; descripcion?: string }>;
   registro_uuid: string | undefined;
+  revisado_por: string | null;
   // campos arbitrarios que se mezclarán en datos.json
   extra?: Record<string, any>;
 }

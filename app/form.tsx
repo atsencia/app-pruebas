@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Platform, 
+  Platform,
   ScrollView,
   Alert,
   Animated,
@@ -26,6 +26,8 @@ import VideoPickerSection from "@/components/VideoPickerSection";
 import ToggleField from "@/components/ToggleField";
 import Colors from "@/constants/colors";
 import { useLocalSearchParams } from "expo-router";
+import { useFormStore } from '../store/zustand-state';
+
 
 
 const C           = Colors.light;
@@ -40,6 +42,13 @@ export interface FirmaPersona {
   cedula: string;
   cargo:  string;
   firma:  string | null;
+}
+
+export interface FirmaPropietarioPredio {
+  nombre:   string;
+  correo:   string;
+  celular:  string;
+  firma:    string | null;
 }
 
 export interface VideoItem {
@@ -57,10 +66,21 @@ export interface FormData {
   direccion:  string;
   telefono:   string;
   propCorreo: string;
+
+  // Campo extra UI — zona/apartamento (se concatena a direccion al enviar)
+  tieneZona:  boolean;
+  zonaDesc:   string;
+
+  // Interventoría — campos completos en observaciones
   interCorreo: string;
+  interNombre: string;
+  interCargo:  string;
 
   firmaConcesionario: FirmaPersona;
   firmaProfesional:   FirmaPersona;
+
+  // Firma del dueño del predio
+  firmaPropietarioPredio: FirmaPropietarioPredio;
 
   latitud:  number | null;
   longitud: number | null;
@@ -111,10 +131,8 @@ export interface FormData {
   planTopografico:          boolean;
   observacionesProfesional: string;
 
-  // ── Multimedia ────────────────────────────
-  // En FormData
   fotos:        { uri: string; descripcion: string }[];
-  fotosFachada: { uri: string; descripcion: string }[];        // ← NUEVO: fotos específicas de la fachada
+  fotosFachada: { uri: string; descripcion: string }[];
   videos:       VideoItem[];
 }
 
@@ -129,9 +147,9 @@ interface FieldErrors {
 // ─────────────────────────────────────────────
 
 const TIPO_ACTA_OPTIONS: { value: FormData["tipoActa"]; label: string }[] = [
-  { value: "inicio",      label: "Inicio",      },
-  { value: "seguimiento", label: "Seguimiento"  },
-  { value: "cierre",      label: "Cierre" },
+  { value: "inicio",      label: "Inicio"      },
+  { value: "seguimiento", label: "Seguimiento" },
+  { value: "cierre",      label: "Cierre"      },
 ];
 
 const SERVICIOS = [
@@ -140,8 +158,9 @@ const SERVICIOS = [
   { key: "servicioEnergia",        label: "Energía"        },
   { key: "servicioTelefono",       label: "Teléfono"       },
   { key: "servicioGas",            label: "Gas"            },
-  { key: "servicioOtros",          label: "Otros"          },
 ] as const;
+
+// "Otros" en servicios es campo libre — se maneja aparte
 
 const USOS_ACTUALES = [
   { key: "usoResidencial",   label: "Residencial"              },
@@ -161,104 +180,193 @@ const SIDEBAR_ITEMS: { icon: any; label: string; route: string; description: str
   { icon: "settings", label: "Gestionar usuarios",  route: "/userManagement", description: "Solo administradores"       },
 ];
 
+// Opciones dropdown
+const SERVICIO_OPTIONS = ["Si", "No", "No Aplica"];
+const USO_OPTIONS      = ["Si", "No", "N/A"];
+
+// ─────────────────────────────────────────────
+// COMPONENTE: SELECT FIELD (dropdown nativo)
+// ─────────────────────────────────────────────
+
+interface SelectFieldProps {
+  label:    string;
+  value:    string;
+  options:  string[];
+  onChange: (v: string) => void;
+  defaultEmpty?: string; // valor a mostrar si está vacío (placeholder)
+}
+
+function SelectField({ label, value, options, onChange, defaultEmpty }: SelectFieldProps) {
+  const [open, setOpen] = useState(false);
+  const displayValue = value || defaultEmpty || options[0];
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Pressable
+        style={[styles.input, styles.selectBtn]}
+        onPress={() => setOpen(!open)}
+      >
+        <Text style={[styles.selectBtnText, !value && { color: C.textSecondary }]}>
+          {displayValue}
+        </Text>
+        <Feather name={open ? "chevron-up" : "chevron-down"} size={14} color={C.textSecondary} />
+      </Pressable>
+      {open && (
+        <View style={styles.selectDropdown}>
+          {options.map((opt) => (
+            <Pressable
+              key={opt}
+              style={[styles.selectOption, value === opt && styles.selectOptionActive]}
+              onPress={() => { onChange(opt); setOpen(false); }}
+            >
+              <Text style={[styles.selectOptionText, value === opt && styles.selectOptionTextActive]}>
+                {opt}
+              </Text>
+              {value === opt && <Feather name="check" size={13} color={C.primary} />}
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────
+// COMPONENTE: SECCIÓN COLAPSABLE DE FIRMA
+// ─────────────────────────────────────────────
+
+interface FirmaSectionProps {
+  icon: any;
+  title: string;
+  signed: boolean;
+  children: React.ReactNode;
+}
+
+function FirmaSection({ icon, title, signed, children }: FirmaSectionProps) {
+  const [open, setOpen] = useState(false);
+  const anim = useRef(new Animated.Value(0)).current;
+
+  const toggle = () => {
+    const toValue = open ? 0 : 1;
+    setOpen(!open);
+    Animated.timing(anim, { toValue, duration: 220, useNativeDriver: false }).start();
+  };
+
+  const bgColor = signed ? "#E6F4EA" : C.card;
+  const borderColor = signed ? "#4CAF50" : C.border;
+  const iconBgColor = signed ? "#C8E6C9" : C.primary + "15";
+  const iconColor   = signed ? "#2E7D32" : C.primary;
+  const chevron = open ? "chevron-up" : "chevron-down";
+
+  return (
+    <View style={[styles.section, { backgroundColor: bgColor, borderWidth: signed ? 1.5 : 0, borderColor }]}>
+      <Pressable
+        style={styles.sectionHeader}
+        onPress={toggle}
+        android_ripple={{ color: "rgba(0,0,0,0.05)" }}
+      >
+        <View style={[styles.sectionIconBg, { backgroundColor: iconBgColor }]}>
+          <Feather name={icon} size={14} color={iconColor} />
+        </View>
+        <Text style={[styles.sectionTitle, signed && { color: "#2E7D32" }]}>{title}</Text>
+        {signed && (
+          <View style={styles.sigBadge}>
+            <Feather name="check-circle" size={13} color="#2E7D32" />
+            <Text style={styles.sigBadgeText}>Firmado</Text>
+          </View>
+        )}
+        <Feather name={chevron} size={16} color={signed ? "#2E7D32" : C.textSecondary} style={{ marginLeft: "auto" }} />
+      </Pressable>
+      {open && <View style={styles.sectionBody}>{children}</View>}
+    </View>
+  );
+}
+
 // ─────────────────────────────────────────────
 // COMPONENTE PRINCIPAL
 // ─────────────────────────────────────────────
 
 export default function FormScreen() {
 
+  const form      = useFormStore((state) => state.formData);
+  const setField  = useFormStore((state) => state.setField);
+  const clearForm = useFormStore((state) => state.clearForm);
+
   const { registro_uuid } = useLocalSearchParams<{ registro_uuid?: string }>();
   const isEditing = !!registro_uuid;
   const [loadingActa, setLoadingActa] = useState(false);
-
-
-  // Carga el acta si viene en modo edición
- 
-
 
   const insets           = useSafeAreaInsets();
   const { user, logout } = useAuth();
 
   // ── Sidebar ──────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
   useEffect(() => {
     if (!registro_uuid) return;
-    
+
     const cargarActa = async () => {
       setLoadingActa(true);
       try {
         const response = await fetch(
           `https://187.33.154.112.sslip.io/backend/api/registros/${registro_uuid}/acta`,
-          {
-            headers: { "Authorization": `Bearer ${user?.token}` }
-          }
+          { headers: { "Authorization": `Bearer ${user?.token}` } }
         );
         if (!response.ok) throw new Error("No se pudo cargar el acta");
         const data = await response.json();
-        console.log("[EDITAR] Respuesta del servidor:", JSON.stringify(data, null, 2));
+
         const f = data.acta;
-        console.log("[EDITAR] Campos encontrados:", Object.keys(f));
-
-        // Mapea los campos al estado del form
-        setForm((prev) => ({
-          ...prev,
-          tipoActa:    f.tipoActa    ?? prev.tipoActa,
-          nombre:      f.nombre      ?? prev.nombre,
-          cedula:      f.cedula      ?? prev.cedula,
-          direccion:   f.direccion   ?? prev.direccion,
-          telefono:    f.telefono    ?? prev.telefono,
-          propCorreo:  f.firmaPropietario?.correo ?? prev.propCorreo,
-          interCorreo: f.firmaInterventoria?.correo ?? prev.interCorreo,
-          latitud:  f.georef?.latitud  ?? f.latitud  ?? prev.latitud,
-          longitud: f.georef?.longitud ?? f.longitud ?? prev.longitud,
-          numeroPisos: f.numeroPisos ?? prev.numeroPisos,
-          estrato:     f.estrato     ?? prev.estrato,
-          anioConstruccion: f.anioConstruccion ?? prev.anioConstruccion,
-          longitudFrenteYFondo: f.longitudFrenteYFondo ?? prev.longitudFrenteYFondo,
-          estaOcupada: f.estaOcupada ?? prev.estaOcupada,
-          servicioAgua: f.servicioAgua ?? prev.servicioAgua,
-          servicioAlcantarillado: f.servicioAlcantarillado ?? prev.servicioAlcantarillado,
-          servicioEnergia: f.servicioEnergia ?? prev.servicioEnergia,
-          servicioTelefono: f.servicioTelefono ?? prev.servicioTelefono,
-          servicioGas: f.servicioGas ?? prev.servicioGas,
-          servicioOtros: f.servicioOtros ?? prev.servicioOtros,
-          tieneGaraje: f.tieneGaraje ?? prev.tieneGaraje,
-          cantidadGarajes: f.cantidadGarajes ?? prev.cantidadGarajes,
-          anchoAccesoVehicular: f.anchoAccesoVehicular ?? prev.anchoAccesoVehicular,
-          fisurasCerradas: f.fisurasCerradas ?? prev.fisurasCerradas,
-          fisurasCerradasDesc: f.fisurasCerradasDesc ?? prev.fisurasCerradasDesc,
-          fisurasAbiertas: f.fisurasAbiertas ?? prev.fisurasAbiertas,
-          fisurasAbiertasDesc: f.fisurasAbiertasDesc ?? prev.fisurasAbiertasDesc,
-          grietas: f.grietas ?? prev.grietas,
-          grietasDesc: f.grietasDesc ?? prev.grietasDesc,
-          acabadosPisos: f.acabadosPisos ?? prev.acabadosPisos,
-          estadoFachada: f.estadoFachada ?? prev.estadoFachada,
-          verticalidad: f.verticalidad ?? prev.verticalidad,
-          verticalidadNotas: f.verticalidadNotas ?? prev.verticalidadNotas,
-          planTopografico: f.planTopografico ?? prev.planTopografico,
-          observacionesProfesional: f.observacionesProfesional ?? prev.observacionesProfesional,
-          firmaConcesionario: f.firmaConcesionario ?? prev.firmaConcesionario,
-          firmaProfesional: f.firmaProfesional ?? prev.firmaProfesional,
-      // Multimedia desde el servidor
-        fotos: data.multimedia?.fotos?.map((f: any) => ({
-          uri: f.url,
-          descripcion: f.descripcion ?? "",
-        })) ?? prev.fotos,
-
-        fotosFachada: data.multimedia?.fotosFachada?.map((f: any) => ({
-          uri: f.url,
-          descripcion: f.descripcion ?? "",
-        })) ?? prev.fotosFachada,
-
-        videos: data.multimedia?.videos?.map((v: any) => ({
-          uri: v.url,
-          thumbnail: null,
-          duration: null,
-          filename: v.nombre,
-        })) ?? prev.videos,
-        }));
+          setField("tipoActa",    f.tipoActa    ?? "");
+          setField("nombre",      f.nombre      ?? "");
+          setField("cedula",      f.cedula      ?? "");
+          setField("direccion",   f.direccion   ?? "");
+          setField("telefono",    f.telefono    ?? "");
+          setField("propCorreo",  f.firmaPropietario?.correo   ?? "");
+          setField("interCorreo", f.firmaInterventoria?.correo ?? "");
+          setField("interNombre", f.firmaInterventoria?.nombre ?? "");
+          setField("interCargo",  f.firmaInterventoria?.cargo  ?? "");
+          setField("latitud",     f.georef?.latitud  ?? f.latitud  ?? null);
+          setField("longitud",    f.georef?.longitud ?? f.longitud ?? null);
+          setField("numeroPisos",          f.numeroPisos          ?? "");
+          setField("estrato",              f.estrato              ?? "");
+          setField("anioConstruccion",     f.anioConstruccion     ?? "");
+          setField("longitudFrenteYFondo", f.longitudFrenteYFondo ??  "");
+          setField("estaOcupada",          f.estaOcupada          ??  false);
+          setField("servicioAgua",           f.servicioAgua           ??  "");
+          setField("servicioAlcantarillado", f.servicioAlcantarillado ??  "");
+          setField("servicioEnergia",        f.servicioEnergia        ??  "");
+          setField("servicioTelefono",       f.servicioTelefono       ?? "");
+          setField("servicioGas",            f.servicioGas            ?? "");
+          setField("servicioOtros",          f.servicioOtros          ?? "");
+          setField("tieneGaraje",          f.tieneGaraje          ?? false);
+          setField("cantidadGarajes",      f.cantidadGarajes      ?? "");
+          setField("anchoAccesoVehicular", f.anchoAccesoVehicular ?? "");
+          setField("fisurasCerradas",     f.fisurasCerradas     ?? false);
+          setField("fisurasCerradasDesc", f.fisurasCerradasDesc ?? "");
+          setField("fisurasAbiertas",     f.fisurasAbiertas     ?? false);
+          setField("fisurasAbiertasDesc", f.fisurasAbiertasDesc ?? "");
+          setField("grietas",             f.grietas             ?? false);
+          setField("grietasDesc",         f.grietasDesc         ?? "");
+          setField("acabadosPisos",  f.acabadosPisos  ?? "");
+          setField("estadoFachada",  f.estadoFachada  ?? "");
+          setField("verticalidad",      f.verticalidad      ?? false);
+          setField("verticalidadNotas", f.verticalidadNotas ?? "");
+          setField("planTopografico",          f.planTopografico          ?? false);
+          setField("observacionesProfesional", f.observacionesProfesional ?? "");
+          setField("firmaConcesionario",     f.firmaConcesionario     ?? { nombre: "", cedula: "", cargo: "", firma: null });
+          setField("firmaProfesional",       f.firmaProfesional       ?? { nombre: "", cedula: "", cargo: "", firma: null });
+          setField("firmaPropietarioPredio", f.firmaPropietarioPredio ?? { nombre: "", correo: "", celular: "", firma: null });
+          setField("fotos", data.multimedia?.fotos?.map((ff: any) => ({
+            uri: ff.url, descripcion: ff.descripcion ?? "",
+          })) ?? []);
+          setField("fotosFachada", data.multimedia?.fotosFachada?.map((ff: any) => ({
+            uri: ff.url, descripcion: ff.descripcion ?? "",
+          })) ?? []);
+          setField("videos", data.multimedia?.videos?.map((v: any) => ({
+            uri: v.url, thumbnail: null, duration: null, filename: v.nombre,
+          })) ?? []);
       } catch (e: any) {
-        console.error("[EDITAR] Error:", e);
         Alert.alert("Error", "No se pudo cargar el acta para editar");
       } finally {
         setLoadingActa(false);
@@ -267,12 +375,9 @@ export default function FormScreen() {
 
     cargarActa();
   }, [registro_uuid, user?.token]);
-  
+
   const sidebarAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
-
-
-  
   const openSidebar = () => {
     setSidebarOpen(true);
     Animated.spring(sidebarAnim, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
@@ -289,32 +394,6 @@ export default function FormScreen() {
   };
 
   // ── Estado del formulario ──────────────────
-  const [form, setForm] = useState<FormData>({
-    tipoActa: "",
-    nombre: "", cedula: "", direccion: "", telefono: "", propCorreo: "",
-    interCorreo: "",
-    firmaConcesionario: { nombre: "", cedula: "", cargo: "", firma: null },
-    firmaProfesional:   { nombre: "", cedula: "", cargo: "", firma: null },
-    
-    latitud: null, longitud: null,
-    longitudFrenteYFondo: "", numeroPisos: "", estrato: "", anioConstruccion: "",
-    estaOcupada: false,
-    servicioAgua: "", servicioAlcantarillado: "", servicioEnergia: "",
-    servicioTelefono: "", servicioGas: "", servicioOtros: "",
-    usoResidencial: "", usoComercial: "", usoIndustrial: "", usoInstitucional: "",
-    usoRecreacional: "", usoBaldio: "", usoBIC: "", usoMixto: "", usoOtro: "",
-    tieneGaraje: false, cantidadGarajes: "", usoGaraje: "",
-    usoGarajeComercial: "", usoGarajeResidencial: "", anchoAccesoVehicular: "",
-    fisurasCerradas: false, fisurasCerradasDesc: "",
-    fisurasAbiertas: false, fisurasAbiertasDesc: "",
-    grietas: false, grietasDesc: "",
-    acabadosPisos: "", estadoFachada: "",
-    verticalidad: false, verticalidadNotas: "",
-    planTopografico: false, observacionesProfesional: "",
-    fotos: [],
-    fotosFachada: [],   // ← NUEVO
-    videos: [],
-  });
 
   const [errors,       setErrors]      = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -325,23 +404,36 @@ export default function FormScreen() {
   const pisos            = parseInt(form.numeroPisos, 10);
   const showVerticalidad = !isNaN(pisos) && pisos >= 4;
 
-  const set = (key: keyof FormData, value: any) =>
-    setForm((f) => ({ ...f, [key]: value }));
+  const set = (key: keyof FormData, value: any) => setField(key, value);
 
   const setFirma = (
     who: "firmaConcesionario" | "firmaProfesional",
     field: keyof FirmaPersona,
     value: any
-  ) => setForm((f) => ({ ...f, [who]: { ...f[who], [field]: value } }));
+  ) => setField(who, { ...form[who], [field]: value });
+
+  const setFirmaProp = (field: keyof FirmaPropietarioPredio, value: any) =>
+    setField("firmaPropietarioPredio", { ...form.firmaPropietarioPredio, [field]: value });
+
+  // Dirección final concatenada con zona (para enviar al backend)
+const direccionFinal = (): string => {
+  const base = (form.direccion ?? "").trim();
+  if (form.tieneZona && (form.zonaDesc ?? "").trim()) {
+    return `${base}, ${(form.zonaDesc ?? "").trim()}`;
+  }
+  return base;
+};
 
   // ── Validación ──────────────────────────────
   const validate = (): boolean => {
-    const e: FieldErrors = {};
-    if (!form.nombre.trim())    e.nombre    = "El nombre es requerido";
-    if (!form.cedula.trim())    e.cedula    = "La cédula es requerida";
-    else if (!/^\d{6,12}$/.test(form.cedula.trim()))
+    const e: FieldErrors = {};  
+    if (!(form.nombre   ?? "").trim()) e.nombre    = "El nombre es requerido";
+    if (!(form.cedula ?? "").trim()) {
+      e.cedula = "La cédula es requerida";
+    } else if (!/^\d{6,12}$/.test((form.cedula ?? "").trim())) {
       e.cedula = "La cédula debe tener entre 6 y 12 dígitos";
-    if (!form.direccion.trim()) e.direccion = "La dirección es requerida";
+    }    
+  if (!(form.direccion ?? "").trim()) e.direccion = "La dirección es requerida";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -349,10 +441,10 @@ export default function FormScreen() {
   // ── JSON objetivo ───────────────────────────
   const buildDatos = () => ({
     tipoActa:  form.tipoActa,
-    nombre:    form.nombre.trim(),
-    cedula:    form.cedula.trim(),
-    direccion: form.direccion.trim(),
-    telefono:  form.telefono.trim(),
+    nombre:    (form.nombre      ?? "").trim(),
+    cedula:    (form.cedula      ?? "").trim(),
+    direccion: direccionFinal(),   // ← dirección con zona concatenada
+    telefono:  (form.telefono    ?? "").trim(),
     georef:    { latitud: form.latitud, longitud: form.longitud },
     latitud:   form.latitud,
     longitud:  form.longitud,
@@ -361,21 +453,21 @@ export default function FormScreen() {
     estrato:              form.estrato,
     anioConstruccion:     form.anioConstruccion,
     estaOcupada:          form.estaOcupada,
-    servicioAgua:           form.servicioAgua,
-    servicioAlcantarillado: form.servicioAlcantarillado,
-    servicioEnergia:        form.servicioEnergia,
-    servicioTelefono:       form.servicioTelefono,
-    servicioGas:            form.servicioGas,
+    servicioAgua:           form.servicioAgua           || "No Aplica",
+    servicioAlcantarillado: form.servicioAlcantarillado || "No Aplica",
+    servicioEnergia:        form.servicioEnergia        || "No Aplica",
+    servicioTelefono:       form.servicioTelefono       || "No Aplica",
+    servicioGas:            form.servicioGas            || "No Aplica",
     servicioOtros:          form.servicioOtros,
-    usoResidencial:   form.usoResidencial   || "NA",
-    usoComercial:     form.usoComercial     || "NA",
-    usoIndustrial:    form.usoIndustrial    || "NA",
-    usoInstitucional: form.usoInstitucional || "NA",
-    usoRecreacional:  form.usoRecreacional  || "NA",
-    usoBaldio:        form.usoBaldio        || "NA",
-    usoBIC:           form.usoBIC           || "NA",
-    usoMixto:         form.usoMixto         || "NA",
-    usoOtro:          form.usoOtro          || "NA",
+    usoResidencial:   form.usoResidencial   || "N/A",
+    usoComercial:     form.usoComercial     || "N/A",
+    usoIndustrial:    form.usoIndustrial    || "N/A",
+    usoInstitucional: form.usoInstitucional || "N/A",
+    usoRecreacional:  form.usoRecreacional  || "N/A",
+    usoBaldio:        form.usoBaldio        || "N/A",
+    usoBIC:           form.usoBIC           || "N/A",
+    usoMixto:         form.usoMixto         || "N/A",
+    usoOtro:          form.usoOtro          || "N/A",
     tieneGaraje:          form.tieneGaraje,
     cantidadGarajes:      form.cantidadGarajes,
     usoGaraje:            form.usoGaraje,
@@ -396,20 +488,24 @@ export default function FormScreen() {
     planTopograficoArchivo:   null,
     observacionesProfesional: form.observacionesProfesional,
     firmaPropietario: {
-      nombre: form.nombre.trim(),
-      cedula: form.cedula.trim(),
+      nombre: (form.nombre ?? "").trim(),
+      cedula: (form.cedula ?? "").trim(),
       cargo:  "",
       firma:  null,
-      correo: form.propCorreo.trim(),
+      correo: (form.propCorreo  ?? "").trim(),
     },
     firmaInterventoria: {
-      nombre: "", cedula: "", cargo: "", firma: null,
-      correo: form.interCorreo.trim(),
+      nombre: (form.interNombre ?? "").trim(),
+      cedula: "",
+      cargo:  (form.interCargo  ?? "").trim(),
+      firma:  null,
+      correo: (form.interCorreo ?? "").trim(),
     },
-    firmaConcesionario: form.firmaConcesionario,
-    firmaProfesional:   form.firmaProfesional,
+    firmaConcesionario:    form.firmaConcesionario,
+    firmaProfesional:      form.firmaProfesional,
+    firmaPropietarioPredio: form.firmaPropietarioPredio,
     fotosCount:        form.fotos.length,
-    fotosFachadaCount: form.fotosFachada.length,   // ← NUEVO
+    fotosFachadaCount: form.fotosFachada.length,
     videosCount:       form.videos.length,
   });
 
@@ -423,15 +519,16 @@ export default function FormScreen() {
     try {
       const resultado = await subirFormularioFTP(
         {
-          nombre:    form.nombre.trim(),
-          apellido: form.cedula.trim(), // o el valor correcto que quieras usar
-          direccion: form.direccion.trim(),
+          nombre:   (form.nombre ?? "").trim(),
+          apellido:  (form.cedula ?? "").trim(),
+          direccion: direccionFinal(),
           georef:    { latitud: form.latitud, longitud: form.longitud },
-          fotos:        form.fotos,        // ya son objetos { uri, descripcion }
-          fotosFachada: form.fotosFachada,  // ← NUEVO
-          videos:       form.videos.map((v) => ({ uri: v.uri })),
+          fotos:        form.fotos,
+          fotosFachada: form.fotosFachada,
+          videos:       form.videos.map((v: any) => ({ uri: v.uri })),
           extra:        buildDatos(),
-          registro_uuid: isEditing ? registro_uuid : undefined, // ← nuevo
+          registro_uuid: isEditing ? registro_uuid : undefined,
+          revisado_por: user?.username ?? null,
         },
         (porcentaje: any, mensaje: any) => console.log(`[FTP] ${porcentaje}% — ${mensaje}`)
       );
@@ -441,12 +538,15 @@ export default function FormScreen() {
         pathname: "/success",
         params: {
           numeroRegistro:     resultado.id,
-          nombre:             form.nombre.trim(),
+          nombre:             (form.nombre ?? "").trim(),
           fotosCount:         String(form.fotos.length),
-          fotosFachadaCount:  String(form.fotosFachada.length),  // ← NUEVO
+          fotosFachadaCount:  String(form.fotosFachada.length),
           videosCount:        String(form.videos.length),
         },
       });
+
+      clearForm();
+
     } catch (e: any) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Error", e.message || "No se pudo enviar el registro");
@@ -457,9 +557,10 @@ export default function FormScreen() {
 
   const handleLogout = async () => { await logout(); router.replace("/login"); };
 
-  // ── Render ──────────────────────────────────
+  // ─────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────
   return (
-    
     <View style={[styles.root, { backgroundColor: C.background }]}>
 
       {/* TOP BAR */}
@@ -485,8 +586,6 @@ export default function FormScreen() {
           <Feather name="log-out" size={18} color="#fff" />
         </Pressable>
       </View>
-
-      
 
       {/* FORMULARIO */}
       <ScrollView
@@ -569,30 +668,66 @@ export default function FormScreen() {
               numberOfLines={3}
             />
           </Field>
-          <View style={styles.divider} />
-          <View style={styles.emailHint}>
-            <Feather name="mail" size={13} color={C.primary} />
-            <Text style={styles.emailHintText}>
-              Se enviará un enlace a este correo para que el propietario complete y firme el acta.
-            </Text>
-          </View>
-          <Field label="Correo del propietario">
-            <TextInput
-              style={styles.input}
-              placeholder="propietario@correo.com"
-              placeholderTextColor={C.textSecondary}
-              value={form.propCorreo}
-              onChangeText={(v) => set("propCorreo", v.trim())}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </Field>
+
+          {/* ── ZONA / APARTAMENTO ────────────────────── */}
+          <ToggleField
+            label="¿El predio se divide en zonas / apartamentos?"
+            value={form.tieneZona ?? false}
+            onChange={(v) => {
+              set("tieneZona", v);
+              if (!v) set("zonaDesc", "");
+            }}
+          />
+          {(form.tieneZona) && (
+            <View style={styles.zonaContainer}>
+              {/* <Feather name="layers" size={13} color={C.primary} style={{ marginTop: 2 }} /> */}
+              <View style={{ flex: 1, gap: 6 }}>
+                <TextInput
+                  style={[styles.input, styles.zonaInput]}
+                  placeholder="Ej. Torre 1 Apto 234 / Zona B"
+                  placeholderTextColor={C.textSecondary}
+                  value={form.zonaDesc ?? ""}
+                  onChangeText={(v) => set("zonaDesc", v)}
+                />
+                {form.zonaDesc?.trim() ? (
+                  <View style={styles.zonaPreview}>
+                    <Feather name="eye" size={11} color={C.primary} />
+                    <Text style={styles.zonaPreviewText} numberOfLines={2}>
+                      Se enviará como: {form.direccion.trim()
+                        ? `${form.direccion.trim()}, ${form.zonaDesc.trim()}`
+                        : form.zonaDesc.trim()}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          )}
+          {/* ────────────────────────────────────────────── */}
+
         </Section>
 
         {/* 2. INTERVENTORÍA */}
         <Section icon="briefcase" title="Interventoría">
-          <InfoBox text="Solo se requiere el correo del representante delegado. Recibirá un enlace para completar sus datos y firmar." />
-          <Field label="Correo del delegado de interventoría">
+          <InfoBox text="Datos del representante delegado. Esta información se guardará en observaciones del acta." />
+          <Field label="Nombre del delegado">
+            <TextInput
+              style={styles.input}
+              placeholder="Nombre y apellidos"
+              placeholderTextColor={C.textSecondary}
+              value={form.interNombre}
+              onChangeText={(v) => set("interNombre", v)}
+            />
+          </Field>
+          <Field label="Cargo">
+            <TextInput
+              style={styles.input}
+              placeholder="Ej. Ingeniero Inspector"
+              placeholderTextColor={C.textSecondary}
+              value={form.interCargo}
+              onChangeText={(v) => set("interCargo", v)}
+            />
+          </Field>
+          <Field label="Correo del delegado">
             <TextInput
               style={styles.input}
               placeholder="interventoria@correo.com"
@@ -672,36 +807,47 @@ export default function FormScreen() {
 
         {/* 4. SERVICIOS PÚBLICOS */}
         <Section icon="zap" title="Servicios Públicos">
-          <InfoBox text="Indique el estado de cada servicio (ej. Si, No, Bueno, Malo, NA)." />
+          <InfoBox text="Seleccione el estado de cada servicio. En 'Otros' describa servicios adicionales." />
           <View style={styles.servicesGrid}>
             {SERVICIOS.map(({ key, label }) => (
               <View key={key} style={styles.serviceItem}>
-                <Text style={styles.serviceLabel}>{label}</Text>
-                <TextInput
-                  style={[styles.input, styles.serviceInput]}
-                  placeholder="Ej. Si"
-                  placeholderTextColor={C.textSecondary}
+                <SelectField
+                  label={label}
                   value={(form as any)[key]}
-                  onChangeText={(v) => set(key as keyof FormData, v)}
+                  options={SERVICIO_OPTIONS}
+                  onChange={(v) => set(key as keyof FormData, v)}
+                  defaultEmpty="No Aplica"
                 />
               </View>
             ))}
+            {/* Otros — campo libre */}
+            <View style={styles.serviceItem}>
+              <Field label="Otros">
+                <TextInput
+                  style={[styles.input, styles.serviceInput]}
+                  placeholder="Describa cuál..."
+                  placeholderTextColor={C.textSecondary}
+                  value={form.servicioOtros}
+                  onChangeText={(v) => set("servicioOtros", v)}
+                />
+              </Field>
+            </View>
           </View>
         </Section>
 
         {/* 5. USO ACTUAL */}
         <Section icon="layers" title="Uso Actual del Predio">
-          <InfoBox text="Describa el uso. Si no aplica, deje en blanco (se enviará como 'NA')." />
+          <InfoBox text="Seleccione el uso. Sin selección se enviará como 'N/A'." />
           {USOS_ACTUALES.map(({ key, label }) => (
             <View key={key} style={styles.usoRow}>
               <Text style={styles.usoLabel}>{label}</Text>
               <View style={styles.usoInputContainer}>
-                <TextInput
-                  style={[styles.input, styles.usoInput]}
-                  placeholder="NA"
-                  placeholderTextColor={C.textSecondary}
+                <SelectField
+                  label=""
                   value={(form as any)[key]}
-                  onChangeText={(v) => set(key as keyof FormData, v)}
+                  options={USO_OPTIONS}
+                  onChange={(v) => set(key as keyof FormData, v)}
+                  defaultEmpty="N/A"
                 />
               </View>
             </View>
@@ -784,7 +930,6 @@ export default function FormScreen() {
         {/* 7. EVALUACIÓN ESTRUCTURAL */}
         <Section icon="alert-triangle" title="Evaluación Estructural">
           <InfoBox text="Las fisuras son discontinuidades en muros, vigas, columnas, losas y placas de entrepiso." />
-
           <ToggleField
             label="Fisuras cerradas"
             description="Discontinuidad cerrada que no afecta la calidad estructural."
@@ -801,9 +946,7 @@ export default function FormScreen() {
               multiline numberOfLines={2}
             />
           )}
-
           <View style={styles.divider} />
-
           <ToggleField
             label="Fisuras abiertas"
             description="Discontinuidad abierta (0.2–2.0 mm) que puede afectar la estabilidad."
@@ -820,9 +963,7 @@ export default function FormScreen() {
               multiline numberOfLines={2}
             />
           )}
-
           <View style={styles.divider} />
-
           <ToggleField
             label="Grietas"
             description="Discontinuidad abierta (>2.0 mm, prof. >10 mm) que afecta estabilidad."
@@ -841,31 +982,7 @@ export default function FormScreen() {
           )}
         </Section>
 
-        {/* 8. ACABADOS Y FACHADA */}
-        <Section icon="grid" title="Acabados y Fachada">
-          <Field label="Tipo de acabados en pisos y su estado">
-            <TextInput
-              style={[styles.input, styles.inputMultilineSmall]}
-              placeholder="Ej. Cerámica — buen estado, sin grietas visibles"
-              placeholderTextColor={C.textSecondary}
-              value={form.acabadosPisos}
-              onChangeText={(v) => set("acabadosPisos", v)}
-              multiline numberOfLines={2}
-            />
-          </Field>
-          <Field label="Estado de la fachada">
-            <TextInput
-              style={[styles.input, styles.inputMultilineSmall]}
-              placeholder="Ej. Pintura — buen estado, con mantenimiento reciente"
-              placeholderTextColor={C.textSecondary}
-              value={form.estadoFachada}
-              onChangeText={(v) => set("estadoFachada", v)}
-              multiline numberOfLines={2}
-            />
-          </Field>
-        </Section>
-
-        {/* 9. VERTICALIDAD */}
+        {/* 8. VERTICALIDAD (condicional) */}
         {showVerticalidad && (
           <Section icon="bar-chart-2" title="Verticalidad (≥4 niveles)">
             <InfoBox text="Verificar por topografía la verticalidad a lo largo de un vértice de la edificación." />
@@ -887,7 +1004,7 @@ export default function FormScreen() {
           </Section>
         )}
 
-        {/* 10. DOCUMENTACIÓN ADICIONAL */}
+        {/* 9. DOCUMENTACIÓN ADICIONAL */}
         <Section icon="file-text" title="Documentación Adicional">
           <ToggleField
             label="Plano de ubicación topográfica radicado"
@@ -908,34 +1025,89 @@ export default function FormScreen() {
           </Field>
         </Section>
 
-        {/* 11. GEOREFERENCIACIÓN */}
-        <Section icon="map-pin" title="Georeferenciación">
+        {/* ══════════════════════════════════════════════
+            10. SECCIÓN FACHADA — Georef + Acabados + Fotos
+            ══════════════════════════════════════════════ */}
+        <Section icon="map" title="Inspección de Fachada y Ubicación">
+          <InfoBox text="Registra la ubicación del predio, el estado exterior, y adjunta las fotografías de fachada." />
+
+          {/* Georeferenciación */}
+          <View style={styles.fachadaSubHeader}>
+            <View style={styles.fachadaSubIconBg}>
+              <Feather name="map-pin" size={12} color={C.primary} />
+            </View>
+            <Text style={styles.fachadaSubTitle}>Georeferenciación</Text>
+          </View>
           <MapPicker
             latitud={form.latitud}
             longitud={form.longitud}
-            onLocationChange={(lat, lng) => setForm((f) => ({ ...f, latitud: lat, longitud: lng }))}
+            onLocationChange={(lat, lng) => {
+              setField("latitud", lat);
+              setField("longitud", lng);
+            }}
           />
-        </Section>
 
-        {/* 12. FOTOGRAFÍAS GENERALES */}
-        <Section icon="camera" title="Fotografías Generales">
-          <InfoBox text="Fotos del interior, estructura, y demás elementos del predio." />
-          <PhotoPickerSection
-            photos={form.fotos}
-            onPhotosChange={(fotos) => set("fotos", fotos)}
-          />
-        </Section>
+          <View style={styles.fachadaDivider} />
 
-        {/* 13. FOTOGRAFÍAS DE FACHADA ← NUEVO */}
-        <Section icon="image" title="Fotografías de Fachada">
-          <InfoBox text="Fotos específicas de la fachada exterior del predio. Se guardarán como fachada_001.jpg, fachada_002.jpg, etc." />
+          {/* Acabados y Fachada */}
+          <View style={styles.fachadaSubHeader}>
+            <View style={styles.fachadaSubIconBg}>
+              <Feather name="grid" size={12} color={C.primary} />
+            </View>
+            <Text style={styles.fachadaSubTitle}>Acabados y Estado de Fachada</Text>
+          </View>
+          <Field label="Tipo de acabados en pisos y su estado">
+            <TextInput
+              style={[styles.input, styles.inputMultilineSmall]}
+              placeholder="Ej. Cerámica — buen estado, sin grietas visibles"
+              placeholderTextColor={C.textSecondary}
+              value={form.acabadosPisos}
+              onChangeText={(v) => set("acabadosPisos", v)}
+              multiline numberOfLines={2}
+            />
+          </Field>
+          <Field label="Estado de la fachada">
+            <TextInput
+              style={[styles.input, styles.inputMultilineSmall]}
+              placeholder="Ej. Pintura — buen estado, con mantenimiento reciente"
+              placeholderTextColor={C.textSecondary}
+              value={form.estadoFachada}
+              onChangeText={(v) => set("estadoFachada", v)}
+              multiline numberOfLines={2}
+            />
+          </Field>
+
+          <View style={styles.fachadaDivider} />
+
+          {/* Fotografías de Fachada */}
+          <View style={styles.fachadaSubHeader}>
+            <View style={styles.fachadaSubIconBg}>
+              <Feather name="image" size={12} color={C.primary} />
+            </View>
+            <Text style={styles.fachadaSubTitle}>Fotografías de Fachada</Text>
+          </View>
+          <Text style={styles.fachadaSubDesc}>
+            Fotos del exterior del predio. Se guardarán como fachada_001.jpg, fachada_002.jpg, etc.
+          </Text>
+           
           <PhotoPickerSection
             photos={form.fotosFachada}
             onPhotosChange={(fotos) => set("fotosFachada", fotos)}
-          />
+              />
         </Section>
 
-        {/* 14. VIDEOS */}
+        {/* 11. FOTOGRAFÍAS GENERALES */}
+        <Section icon="camera" title="Fotografías Generales">
+          <InfoBox text="Fotos del interior, estructura, y demás elementos del predio." />
+         <PhotoPickerSection
+            photos={form.fotos}
+            onPhotosChange={(fotos) => set("fotos", fotos)}
+            showDescription={true}
+          maxPhotos={15}
+              />
+        </Section>
+
+        {/* 12. VIDEOS */}
         <Section icon="video" title="Videos">
           <VideoPickerSection
             videos={form.videos}
@@ -943,8 +1115,75 @@ export default function FormScreen() {
           />
         </Section>
 
-        {/* 15. FIRMA — CONCESIONARIO */}
-        <Section icon="award" title="Representante Delegado Sencia S.A.S.">
+        {/* 13. FIRMA — DUEÑO DEL PREDIO (colapsable) */}
+        <FirmaSection
+          icon="home"
+          title="Firma del Dueño del Predio"
+          signed={!!form.firmaPropietarioPredio.firma}
+        >
+          <InfoBox text="Datos de contacto y firma manuscrita del propietario o residente del predio." />
+          <View style={styles.row}>
+            <View style={styles.rowHalf}>
+              <Field label="Nombre completo">
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nombre y apellidos"
+                  placeholderTextColor={C.textSecondary}
+                  value={form.firmaPropietarioPredio.nombre}
+                  onChangeText={(v) => setFirmaProp("nombre", v)}
+                />
+              </Field>
+            </View>
+            <View style={styles.rowHalf}>
+              <Field label="Celular">
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej. 3001234567"
+                  placeholderTextColor={C.textSecondary}
+                  value={form.firmaPropietarioPredio.celular}
+                  onChangeText={(v) => setFirmaProp("celular", v.replace(/\D/g, ""))}
+                  keyboardType="phone-pad"
+                  maxLength={15}
+                />
+              </Field>
+            </View>
+          </View>
+          <Field label="Correo electrónico">
+            <TextInput
+              style={styles.input}
+              placeholder="propietario@correo.com"
+              placeholderTextColor={C.textSecondary}
+              value={form.firmaPropietarioPredio.correo}
+              onChangeText={(v) => setFirmaProp("correo", v.trim())}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </Field>
+          <View style={styles.emailHint}>
+            <Feather name="mail" size={13} color={C.primary} />
+            <Text style={styles.emailHintText}>
+              Se enviará un enlace a este correo para que el propietario complete y firme el acta.
+            </Text>
+          </View>
+          <Field label="Firma">
+            <SignaturePad
+              onSignatureChange={(sig) => setFirmaProp("firma", sig)}
+            />
+          </Field>
+          {form.firmaPropietarioPredio.firma && (
+            <View style={styles.sigConfirm}>
+              <Feather name="check-circle" size={13} color="#2E7D32" />
+              <Text style={[styles.sigConfirmText, { color: "#2E7D32" }]}>Firma capturada</Text>
+            </View>
+          )}
+        </FirmaSection>
+
+        {/* 14. FIRMA — CONCESIONARIO (colapsable) */}
+        <FirmaSection
+          icon="award"
+          title="Representante Delegado Sencia S.A.S."
+          signed={!!form.firmaConcesionario.firma}
+        >
           <InfoBox text="Datos y firma del representante delegado del concesionario." />
           <View style={styles.row}>
             <View style={styles.rowHalf}>
@@ -985,14 +1224,18 @@ export default function FormScreen() {
           </Field>
           {form.firmaConcesionario.firma && (
             <View style={styles.sigConfirm}>
-              <Feather name="check-circle" size={13} color={C.accent} />
-              <Text style={styles.sigConfirmText}>Firma capturada</Text>
+              <Feather name="check-circle" size={13} color="#2E7D32" />
+              <Text style={[styles.sigConfirmText, { color: "#2E7D32" }]}>Firma capturada</Text>
             </View>
           )}
-        </Section>
+        </FirmaSection>
 
-        {/* 16. FIRMA — PROFESIONAL TÉCNICO */}
-        <Section icon="tool" title="Profesional Técnico">
+        {/* 15. FIRMA — PROFESIONAL TÉCNICO (colapsable) */}
+        <FirmaSection
+          icon="tool"
+          title="Profesional Técnico"
+          signed={!!form.firmaProfesional.firma}
+        >
           <InfoBox text="Datos y firma del profesional técnico que diligencia el acta." />
           <View style={styles.row}>
             <View style={styles.rowHalf}>
@@ -1033,53 +1276,48 @@ export default function FormScreen() {
           </Field>
           {form.firmaProfesional.firma && (
             <View style={styles.sigConfirm}>
-              <Feather name="check-circle" size={13} color={C.accent} />
-              <Text style={styles.sigConfirmText}>Firma capturada</Text>
+              <Feather name="check-circle" size={13} color="#2E7D32" />
+              <Text style={[styles.sigConfirmText, { color: "#2E7D32" }]}>Firma capturada</Text>
             </View>
           )}
-        </Section>
+        </FirmaSection>
 
         {/* RESUMEN */}
         <View style={styles.summary}>
           <Text style={styles.summaryTitle}>Resumen del Registro</Text>
           <SummaryItem icon="file-text"   label="Tipo acta"       value={form.tipoActa ? form.tipoActa.charAt(0).toUpperCase() + form.tipoActa.slice(1) : "—"} filled={!!form.tipoActa} />
-          <SummaryItem icon="user"        label="Nombre"          value={form.nombre.trim()       || "—"} filled={!!form.nombre.trim()} />
-          <SummaryItem icon="credit-card" label="Cédula"          value={form.cedula.trim()       || "—"} filled={!!form.cedula.trim()} />
-          <SummaryItem icon="mail"        label="Prop. correo"    value={form.propCorreo.trim()   || "—"} filled={!!form.propCorreo.trim()} />
-          <SummaryItem icon="mail"        label="Inter. correo"   value={form.interCorreo.trim()  || "—"} filled={!!form.interCorreo.trim()} />
+          <SummaryItem icon="user"        label="Nombre"          value={(form.nombre      ?? "").trim() || "—"}  filled={!!(form.nombre      ?? "").trim()} />
+          <SummaryItem icon="credit-card" label="Cédula"          value={(form.cedula      ?? "").trim() || "—"}  filled={!!(form.cedula      ?? "").trim()} />
+          <SummaryItem icon="map-pin"     label="Dirección"       value={direccionFinal()         || "—"} filled={!!direccionFinal()} />
+          <SummaryItem icon="briefcase"   label="Inter. nombre"   value={(form.interNombre ?? "").trim() || "—"}  filled={!!(form.interNombre ?? "").trim()} />
+          <SummaryItem icon="mail"        label="Inter. correo"   value={(form.interCorreo ?? "").trim() || "—"}  filled={!!(form.interCorreo ?? "").trim()} />
           <SummaryItem icon="home"        label="Pisos"           value={form.numeroPisos ? `${form.numeroPisos} pisos — estrato ${form.estrato || "?"}` : "—"} filled={!!form.numeroPisos} />
           <SummaryItem icon="map-pin"     label="Ubicación"       value={form.latitud !== null ? "Capturada" : "Sin capturar"} filled={form.latitud !== null} />
-          <SummaryItem icon="camera"      label="Fotos generales" value={`${form.fotos.length} adjuntas`}         filled={form.fotos.length > 0} />
-          <SummaryItem icon="image"       label="Fotos fachada"   value={`${form.fotosFachada.length} adjuntas`}  filled={form.fotosFachada.length > 0} />
-          <SummaryItem icon="video"       label="Videos"          value={`${form.videos.length} adjuntos`}        filled={form.videos.length > 0} />
+          <SummaryItem icon="camera"      label="Fotos generales" value={`${form.fotos.length} adjuntas`}        filled={form.fotos.length > 0} />
+          <SummaryItem icon="image"       label="Fotos fachada"   value={`${form.fotosFachada.length} adjuntas`} filled={form.fotosFachada.length > 0} />
+          <SummaryItem icon="video"       label="Videos"          value={`${form.videos.length} adjuntos`}       filled={form.videos.length > 0} />
+          <SummaryItem icon="home"        label="Firma propiet."  value={form.firmaPropietarioPredio.firma ? "Capturada" : "Sin capturar"} filled={!!form.firmaPropietarioPredio.firma} />
           <SummaryItem icon="award"       label="Conc. firma"     value={form.firmaConcesionario.firma ? "Capturada" : "Sin capturar"} filled={!!form.firmaConcesionario.firma} />
           <SummaryItem icon="tool"        label="Prof. firma"     value={form.firmaProfesional.firma   ? "Capturada" : "Sin capturar"} filled={!!form.firmaProfesional.firma} />
           <View style={styles.uploadNote}>
             <Feather name="upload-cloud" size={12} color={C.textSecondary} />
             <Text style={styles.uploadNoteText}>
-
-      Los archivos se depositarán en el servidor FTP en /uploads/[ID del registro]            
-        </Text>
+              Los archivos se depositarán en el servidor FTP en /uploads/[ID del registro]
+            </Text>
           </View>
         </View>
-     {/* Justo antes del botón ENVIAR, agrega: */}
+
         {Object.keys(errors).length > 0 && (
           <View style={styles.errorSummary}>
             <View style={styles.errorSummaryHeader}>
               <Feather name="alert-circle" size={16} color="#E53E3E" />
               <Text style={styles.errorSummaryTitle}>
-                Hay {Object.keys(errors).length} campo{Object.keys(errors).length > 1 ? 's' : ''} con error
+                Hay {Object.keys(errors).length} campo{Object.keys(errors).length > 1 ? "s" : ""} con error
               </Text>
             </View>
-            {errors.nombre && (
-              <Text style={styles.errorSummaryItem}>• Nombre: {errors.nombre}</Text>
-            )}
-            {errors.cedula && (
-              <Text style={styles.errorSummaryItem}>• Cédula: {errors.cedula}</Text>
-            )}
-            {errors.direccion && (
-              <Text style={styles.errorSummaryItem}>• Dirección: {errors.direccion}</Text>
-            )}
+            {errors.nombre    && <Text style={styles.errorSummaryItem}>• Nombre: {errors.nombre}</Text>}
+            {errors.cedula    && <Text style={styles.errorSummaryItem}>• Cédula: {errors.cedula}</Text>}
+            {errors.direccion && <Text style={styles.errorSummaryItem}>• Dirección: {errors.direccion}</Text>}
           </View>
         )}
 
@@ -1097,10 +1335,10 @@ export default function FormScreen() {
             <ActivityIndicator color="#fff" size="small" />
           ) : (
             <>
-               <Feather name={isEditing ? "edit-2" : "upload-cloud"} size={18} color="#fff" />
-                <Text style={styles.submitText}>
-                  {isEditing ? "Guardar Cambios" : "Enviar Registro"}
-                </Text>
+              <Feather name={isEditing ? "edit-2" : "upload-cloud"} size={18} color="#fff" />
+              <Text style={styles.submitText}>
+                {isEditing ? "Guardar Cambios" : "Enviar Registro"}
+              </Text>
             </>
           )}
         </Pressable>
@@ -1109,11 +1347,7 @@ export default function FormScreen() {
 
       {/* OVERLAY */}
       {sidebarOpen && (
-        <TouchableOpacity
-          style={styles.overlay}
-          activeOpacity={1}
-          onPress={closeSidebar}
-        />
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeSidebar} />
       )}
 
       {/* SIDEBAR */}
@@ -1174,11 +1408,11 @@ export default function FormScreen() {
           <View style={styles.sidebarUserRow}>
             <View style={styles.sidebarUserAvatar}>
               <Text style={styles.sidebarUserAvatarText}>
-              {(user?.nombre ?? user?.username)?.charAt(0).toUpperCase() ?? "U"}
-            </Text>
+                {(user?.nombre ?? user?.username)?.charAt(0).toUpperCase() ?? "U"}
+              </Text>
             </View>
             <View style={{ flex: 1 }}>
-            <Text style={styles.sidebarUserName}>{user?.nombre ?? user?.username}</Text>
+              <Text style={styles.sidebarUserName}>{user?.nombre ?? user?.username}</Text>
               <Text style={styles.sidebarUserRole}>Operador</Text>
             </View>
             <Pressable
@@ -1192,18 +1426,18 @@ export default function FormScreen() {
         </View>
       </Animated.View>
 
-        {loadingActa && (
-          <View style={{
-            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: "rgba(255,255,255,0.85)", zIndex: 50,
-            justifyContent: "center", alignItems: "center", gap: 12,
-          }}>
-            <ActivityIndicator size="large" color={C.primary} />
-            <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: C.textSecondary }}>
-              Cargando datos del registro...
-            </Text>
-          </View>
-        )}
+      {loadingActa && (
+        <View style={{
+          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(255,255,255,0.85)", zIndex: 50,
+          justifyContent: "center", alignItems: "center", gap: 12,
+        }}>
+          <ActivityIndicator size="large" color={C.primary} />
+          <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: C.textSecondary }}>
+            Cargando datos del registro...
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -1229,7 +1463,7 @@ function Section({ icon, title, children }: { icon: any; title: string; children
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <View style={styles.fieldContainer}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
       {children}
       {error && (
         <View style={styles.fieldError}>
@@ -1269,7 +1503,6 @@ function SummaryItem({ icon, label, value, filled }: { icon: any; label: string;
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
-  // ── Top bar ─────────────────────────────────
   topBar: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingBottom: 18, gap: 12,
@@ -1283,11 +1516,9 @@ const styles = StyleSheet.create({
   topBarTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.3 },
   topBarSub:    { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 1 },
 
-  // ── Scroll / layout ─────────────────────────
   scroll:  { flex: 1 },
   content: { padding: 16, gap: 14 },
 
-  // ── Tipo de acta ─────────────────────────────
   tipoActaCard: {
     backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 14,
     shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
@@ -1307,7 +1538,6 @@ const styles = StyleSheet.create({
   tipoActaBtnText:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
   tipoActaBtnTextActive: { color: "#fff" },
 
-  // ── Sección genérica ─────────────────────────
   section: {
     backgroundColor: C.card, borderRadius: 20, overflow: "hidden",
     shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
@@ -1327,7 +1557,14 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.1 },
   sectionBody:  { padding: 18, gap: 14 },
 
-  // ── Campos ───────────────────────────────────
+  // Badge "Firmado"
+  sigBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#E6F4EA", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
+    marginLeft: 8,
+  },
+  sigBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#2E7D32" },
+
   fieldContainer: { gap: 7 },
   fieldLabel: {
     fontSize: 11, fontFamily: "Inter_600SemiBold",
@@ -1350,7 +1587,47 @@ const styles = StyleSheet.create({
   fieldError:     { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
   fieldErrorText: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.error },
 
-  // ── Hint correo ──────────────────────────────
+  // Zona / Apartamento
+  zonaContainer: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: C.primary + "08", borderRadius: 12,
+    borderWidth: 1.5, borderColor: C.primary + "30",
+    padding: 12, marginTop: 4,
+  },
+  zonaInput: { marginBottom: 0 },
+  zonaPreview: {
+    flexDirection: "row", alignItems: "flex-start", gap: 6,
+    backgroundColor: C.primary + "12", borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 7,
+  },
+  zonaPreviewText: {
+    flex: 1, fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.primary, lineHeight: 17,
+  },
+
+  // Select dropdown
+  selectBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+  },
+  selectBtnText: {
+    fontSize: 15, fontFamily: "Inter_400Regular", color: C.text, flex: 1,
+  },
+  selectDropdown: {
+    backgroundColor: C.card, borderRadius: 12,
+    borderWidth: 1.5, borderColor: C.border,
+    overflow: "hidden", marginTop: 2,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1, shadowRadius: 8, elevation: 4,
+  },
+  selectOption: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 14, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: C.border,
+  },
+  selectOptionActive:     { backgroundColor: C.primary + "10" },
+  selectOptionText:       { fontSize: 15, fontFamily: "Inter_400Regular", color: C.text },
+  selectOptionTextActive: { fontFamily: "Inter_600SemiBold", color: C.primary },
+
   emailHint: {
     flexDirection: "row", alignItems: "flex-start", gap: 9,
     backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12,
@@ -1361,7 +1638,6 @@ const styles = StyleSheet.create({
     color: C.textSecondary, lineHeight: 18,
   },
 
-  // ── InfoBox ──────────────────────────────────
   infoBox: {
     flexDirection: "row", alignItems: "flex-start", gap: 9,
     backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12,
@@ -1372,31 +1648,47 @@ const styles = StyleSheet.create({
     color: C.textSecondary, lineHeight: 18,
   },
 
-  // ── Layout helpers ───────────────────────────
   row:     { flexDirection: "row", gap: 12 },
   rowHalf: { flex: 1 },
   divider: { height: 1, backgroundColor: C.border, marginVertical: 2 },
 
-  // ── Servicios ────────────────────────────────
   servicesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  serviceItem:  { width: "47%", gap: 6 },
+  serviceItem:  { width: "47%" },
   serviceLabel: {
     fontSize: 11, fontFamily: "Inter_600SemiBold",
     color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.5,
   },
   serviceInput: { paddingVertical: 11, fontSize: 14 },
 
-  // ── Uso actual ───────────────────────────────
   usoRow:           { flexDirection: "row", alignItems: "center", gap: 12 },
   usoLabel:         { width: 130, fontSize: 13, fontFamily: "Inter_500Medium", color: C.text },
   usoInputContainer:{ flex: 1 },
   usoInput:         { paddingVertical: 10, fontSize: 14 },
 
-  // ── Firma confirmación ───────────────────────
+  // Fachada sub-sección (dentro de la sección unificada)
+  fachadaDivider: {
+    height: 1, backgroundColor: C.border, marginVertical: 6,
+  },
+  fachadaSubHeader: {
+    flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4,
+  },
+  fachadaSubIconBg: {
+    width: 26, height: 26, borderRadius: 8,
+    backgroundColor: C.primary + "18",
+    justifyContent: "center", alignItems: "center",
+  },
+  fachadaSubTitle: {
+    fontSize: 13, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.1,
+  },
+  fachadaSubDesc: {
+    fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, lineHeight: 17, marginBottom: 8,
+    marginLeft: 34,
+  },
+
   sigConfirm:     { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
   sigConfirmText: { fontSize: 12, fontFamily: "Inter_500Medium", color: C.accent },
 
-  // ── Resumen ──────────────────────────────────
   summary: {
     backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 10,
     shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
@@ -1422,7 +1714,6 @@ const styles = StyleSheet.create({
     color: C.textSecondary, lineHeight: 16,
   },
 
-  // ── Botón enviar ─────────────────────────────
   submitBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
     backgroundColor: C.accent, borderRadius: 16, paddingVertical: 19, marginTop: 4,
@@ -1433,7 +1724,6 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { opacity: 0.6 },
   submitText:        { fontSize: 17, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.2 },
 
-  // ── Sidebar ──────────────────────────────────
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.38)", zIndex: 10 },
   sidebar: {
     position: "absolute", top: 0, left: 0, bottom: 0,
@@ -1466,28 +1756,12 @@ const styles = StyleSheet.create({
   sidebarUserName:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.text },
   sidebarUserRole:       { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
   sidebarLogoutBtn:      { width: 32, height: 32, borderRadius: 9, backgroundColor: C.error + "15", justifyContent: "center", alignItems: "center" },
+
   errorSummary: {
-  backgroundColor: "#FFF5F5",
-  borderRadius: 14,
-  padding: 16,
-  borderWidth: 1.5,
-  borderColor: "#FEB2B2",
-  gap: 8,
-},
-errorSummaryHeader: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 8,
-},
-errorSummaryTitle: {
-  fontSize: 14,
-  fontFamily: "Inter_600SemiBold",
-  color: "#E53E3E",
-},
-errorSummaryItem: {
-  fontSize: 13,
-  fontFamily: "Inter_400Regular",
-  color: "#C53030",
-  paddingLeft: 4,
-},
+    backgroundColor: "#FFF5F5", borderRadius: 14, padding: 16,
+    borderWidth: 1.5, borderColor: "#FEB2B2", gap: 8,
+  },
+  errorSummaryHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  errorSummaryTitle:  { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#E53E3E" },
+  errorSummaryItem:   { fontSize: 13, fontFamily: "Inter_400Regular", color: "#C53030", paddingLeft: 4 },
 });

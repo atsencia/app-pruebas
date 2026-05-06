@@ -9,6 +9,7 @@ import {
 import Svg, { Path } from "react-native-svg";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
+import ViewShot from "react-native-view-shot";
 
 const C = Colors.light;
 

@@ -58,7 +58,9 @@ export default function SearchScreen() {
     setLoading(true);
     setError(null);
     try {
-      const url = `https://187.33.154.112.sslip.io/backend/api/registros/buscar?q=${encodeURIComponent(q)}`;
+console.log("USER COMPLETO:", JSON.stringify(user));      
+
+const url = `https://187.33.154.112.sslip.io/backend/api/registros/buscar?q=${encodeURIComponent(q)}`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -66,7 +68,7 @@ export default function SearchScreen() {
           "Authorization": `Bearer ${user?.token}`,
         },
       });
-
+ 
       if (!response.ok) throw new Error("Error al buscar registros");
 
       const data = await response.json();
