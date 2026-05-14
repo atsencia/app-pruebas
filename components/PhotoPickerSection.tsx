@@ -1,5 +1,5 @@
 // components/PhotoPickerSection.tsx
-import React from "react";
+import React, {useEffect} from "react";
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
+import * as MediaLibrary from 'expo-media-library';
+
 
 const C = Colors.light;
 // const MAX_PHOTOS = 6;  ← Eliminado
@@ -34,6 +36,13 @@ export default function PhotoPickerSection({
   const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
   const [mediaPermission, requestMediaPermission] = ImagePicker.useMediaLibraryPermissions();
 
+
+  // Al montar el componente, pedir permiso en contexto
+useEffect(() => {
+  MediaLibrary.requestPermissionsAsync();
+  // Si el usuario lo niega aquí, lo entiende: acaba de tocar "agregar foto"
+  // No necesitas hacer nada con la respuesta aquí — solo solicitar
+}, []);
   const hasLimit = maxPhotos !== undefined;
   const currentCount = photos.length;
 
