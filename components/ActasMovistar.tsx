@@ -1,10 +1,10 @@
 // components/ActasMovistar.tsx
-// Desplegable en el sidebar que permite buscar y cargar
-// actas pre-cargadas por dirección para completarlas.
+// Desplegable en el sidebar con actas precargadas como botones directos.
+// Sin buscador — el admin carga las direcciones en ACTAS_PREDETERMINADAS.
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import {
-  View, Text, TextInput, Pressable, ActivityIndicator,
+  View, Text, Pressable, ScrollView,
   StyleSheet, Animated, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -13,33 +13,63 @@ import { useFormStore } from '@/store/zustand-state';
 import Colors from '@/constants/colors';
 
 const C = Colors.light;
-const API = 'https://187.33.154.112.sslip.io/backend/api';
 
-interface RegistroPreview {
+// ─────────────────────────────────────────────────────────────────
+// ARRAY PREDETERMINADO — editar aquí para agregar / quitar actas
+// ─────────────────────────────────────────────────────────────────
+interface ActaPredeterminada {
   registro_uuid: string;
-  nombre:        string;
-  cedula:        string;
   direccion:     string;
-  tipo_acta:     string | null;
-  estado:        string | null;
+  nombre?:       string;     // nombre del propietario / referencia (opcional)
+  tipo_acta?:    string;
+  estado?:       'pendiente' | 'firmada' | 'revisada' | 'correcta' | 'devuelta';
 }
 
+const ACTAS_PREDETERMINADAS: ActaPredeterminada[] = [
+  {
+    registro_uuid: 'uuid-001',
+    direccion:     'Calle 123 #45-67, Bogotá',
+    nombre:        'Predio Norte 1',
+    estado:        'pendiente',
+  },
+  {
+    registro_uuid: 'uuid-002',
+    direccion:     'Carrera 80 #12-34, Medellín',
+    nombre:        'Predio Sur A',
+    estado:        'firmada',
+  },
+  {
+    registro_uuid: 'uuid-003',
+    direccion:     'Av. El Dorado #68B-31, Bogotá',
+    nombre:        'Predio Centro',
+    estado:        'devuelta',
+  },
+  {
+    registro_uuid: 'uuid-004',
+    direccion:     'Calle 10 #5-20, Cali',
+    nombre:        'Predio Oeste 2',
+    estado:        'correcta',
+  },
+];
+// ─────────────────────────────────────────────────────────────────
+
+const ESTADO_CONFIG: Record<string, { color: string; label: string; icon: string }> = {
+  pendiente: { color: '#DD6B20', label: 'Pendiente', icon: 'clock'      },
+  firmada:   { color: '#2563EB', label: 'Firmada',   icon: 'check'      },
+  revisada:  { color: '#7C3AED', label: 'Revisada',  icon: 'eye'        },
+  correcta:  { color: '#16A34A', label: 'Correcta',  icon: 'check-circle'},
+  devuelta:  { color: '#DC2626', label: 'Devuelta',  icon: 'alert-circle'},
+};
+
 interface Props {
-  onActaSeleccionada: (registro_uuid: string) => void; // cierra sidebar y carga el acta
+  onActaSeleccionada: (registro_uuid: string) => void;
 }
 
 export default function ActasMovistar({ onActaSeleccionada }: Props) {
-  const { user }    = useAuth();
-  const clearForm   = useFormStore(s => s.clearForm);
+  const clearForm = useFormStore(s => s.clearForm);
 
-  const [abierto,    setAbierto]    = useState(false);
-  const [query,      setQuery]      = useState('');
-  const [resultados, setResultados] = useState<RegistroPreview[]>([]);
-  const [cargando,   setCargando]   = useState(false);
-  const [buscado,    setBuscado]    = useState(false);
-
-  const anim     = useRef(new Animated.Value(0)).current;
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [abierto, setAbierto] = useState(false);
+  const anim = useRef(new Animated.Value(0)).current;
 
   const toggleAbierto = () => {
     const siguiente = !abierto;
@@ -49,157 +79,118 @@ export default function ActasMovistar({ onActaSeleccionada }: Props) {
       duration:        220,
       useNativeDriver: false,
     }).start();
-    if (!siguiente) {
-      setQuery('');
-      setResultados([]);
-      setBuscado(false);
-    }
   };
 
-  const buscar = useCallback(async (texto: string) => {
-    if (texto.trim().length < 2) {
-      setResultados([]);
-      setBuscado(false);
-      return;
-    }
-    setCargando(true);
-    try {
-      const res = await fetch(
-        `${API}/registros/buscar?q=${encodeURIComponent(texto.trim())}`,
-        { headers: { Authorization: `Bearer ${user?.token}` } }
-      );
-      if (!res.ok) throw new Error('Error en la búsqueda');
-      const data = await res.json();
-      setResultados(data.data ?? []);
-      setBuscado(true);
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'No se pudo buscar');
-    } finally {
-      setCargando(false);
-    }
-  }, [user?.token]);
-
-  const onChangeText = (v: string) => {
-    setQuery(v);
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => buscar(v), 500);
-  };
-
-  const seleccionar = (item: RegistroPreview) => {
+  const seleccionar = (item: ActaPredeterminada) => {
     Alert.alert(
       'Cargar acta',
-      `¿Cargar el acta de:\n${item.direccion}?`,
+      `¿Editar el acta de:\n${item.direccion}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Cargar',
           onPress: () => {
-            clearForm();                        // limpiar form actual
-            onActaSeleccionada(item.registro_uuid); // el padre cierra sidebar y navega
+            clearForm();
+            onActaSeleccionada(item.registro_uuid);
           },
         },
       ]
     );
   };
 
-  // Badge de estado
-  const estadoConfig: Record<string, { color: string; label: string }> = {
-    pendiente: { color: '#DD6B20', label: 'Pendiente' },
-    firmada:   { color: '#2563EB', label: 'Firmada'   },
-    revisada:  { color: '#7C3AED', label: 'Revisada'  },
-    correcta:  { color: '#16A34A', label: 'Correcta'  },
-    devuelta:  { color: '#DC2626', label: 'Devuelta'  },
-  };
+  const total     = ACTAS_PREDETERMINADAS.length;
+  const pendientes = ACTAS_PREDETERMINADAS.filter(a => a.estado === 'pendiente' || a.estado === 'devuelta').length;
 
   return (
     <View style={styles.wrapper}>
-      {/* Cabecera del desplegable */}
+
+      {/* ── Cabecera ── */}
       <Pressable
-        style={({ pressed }) => [styles.header, pressed && { opacity: 0.75 }]}
+        style={({ pressed }) => [styles.header, pressed && { opacity: 0.8 }]}
         onPress={toggleAbierto}
       >
         <View style={[styles.iconBg, abierto && styles.iconBgActive]}>
-          <Feather name="briefcase" size={16} color={abierto ? '#fff' : C.primary} />
+          <Feather name="briefcase" size={15} color={abierto ? '#fff' : C.primary} />
         </View>
+
         <View style={styles.headerText}>
           <Text style={[styles.headerLabel, abierto && { color: C.primary }]}>
             Actas Movistar
           </Text>
-          <Text style={styles.headerDesc}>Predios pre-cargados</Text>
+          
         </View>
+
+        
         <Feather
           name={abierto ? 'chevron-up' : 'chevron-down'}
           size={14}
           color={C.textSecondary}
+          style={{ marginLeft: 4 }}
         />
       </Pressable>
 
-      {/* Cuerpo desplegable */}
+      {/* ── Cuerpo desplegable ── */}
       {abierto && (
         <View style={styles.body}>
-          {/* Buscador */}
-          <View style={styles.searchRow}>
-            <Feather name="search" size={14} color={C.textSecondary} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Buscar por dirección..."
-              placeholderTextColor={C.textSecondary}
-              value={query}
-              onChangeText={onChangeText}
-              autoCapitalize="none"
-              returnKeyType="search"
-              onSubmitEditing={() => buscar(query)}
-            />
-            {cargando && (
-              <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 8 }} />
-            )}
-            {query.length > 0 && !cargando && (
-              <Pressable onPress={() => { setQuery(''); setResultados([]); setBuscado(false); }} hitSlop={8}>
-                <Feather name="x" size={14} color={C.textSecondary} style={{ marginRight: 8 }} />
-              </Pressable>
-            )}
-          </View>
 
-          {/* Resultados */}
-          {buscado && resultados.length === 0 && !cargando && (
+          {ACTAS_PREDETERMINADAS.length === 0 ? (
             <View style={styles.emptyMsg}>
               <Feather name="inbox" size={16} color={C.textSecondary} />
-              <Text style={styles.emptyText}>Sin resultados para "{query}"</Text>
+              <Text style={styles.emptyText}>Sin actas precargadas</Text>
             </View>
-          )}
+          ) : (
+            ACTAS_PREDETERMINADAS.map((item, index) => {
+              const cfg = ESTADO_CONFIG[item.estado ?? ''] ?? {
+                color: C.textSecondary,
+                label: item.estado ?? '—',
+                icon:  'circle',
+              };
 
-          {!buscado && !cargando && (
-            <Text style={styles.hint}>
-              Escribe al menos 2 caracteres de la dirección
-            </Text>
-          )}
-
-          {resultados.map((item) => {
-            const cfg = estadoConfig[item.estado ?? ''] ?? { color: C.textSecondary, label: item.estado ?? '—' };
-            return (
-              <Pressable
-                key={item.registro_uuid}
-                style={({ pressed }) => [styles.item, pressed && { opacity: 0.75 }]}
-                onPress={() => seleccionar(item)}
-              >
-                <View style={styles.itemIconBg}>
-                  <Feather name="home" size={13} color={C.primary} />
-                </View>
-                <View style={styles.itemText}>
-                  <Text style={styles.itemDir} numberOfLines={2}>{item.direccion}</Text>
-                  {item.nombre ? (
-                    <Text style={styles.itemNombre} numberOfLines={1}>{item.nombre}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.itemRight}>
-                  <View style={[styles.estadoBadge, { backgroundColor: cfg.color + '18' }]}>
-                    <Text style={[styles.estadoText, { color: cfg.color }]}>{cfg.label}</Text>
+              return (
+                <Pressable
+                  key={item.registro_uuid}
+                  style={({ pressed }) => [
+                    styles.item,
+                    pressed && styles.itemPressed,
+                  ]}
+                  onPress={() => seleccionar(item)}
+                >
+                  {/* Número de orden */}
+                  <View style={styles.indexBg}>
+                    <Text style={styles.indexText}>{index + 1}</Text>
                   </View>
-                  <Feather name="chevron-right" size={12} color={C.textSecondary} style={{ marginTop: 4 }} />
-                </View>
-              </Pressable>
-            );
-          })}
+
+                  {/* Texto */}
+                  <View style={styles.itemContent}>
+                    <Text style={styles.itemDir} numberOfLines={2}>
+                      {item.direccion}
+                    </Text>
+                    {item.nombre ? (
+                      <Text style={styles.itemNombre} numberOfLines={1}>
+                        {item.nombre}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {/* Estado + flecha */}
+                  <View style={styles.itemRight}>
+                    <View style={[styles.estadoBadge, { backgroundColor: cfg.color + '18' }]}>
+                      {/* <Feather name={cfg.icon as any} size={9} color={cfg.color} /> */}
+                      {/* <Text style={[styles.estadoText, { color: cfg.color }]}>
+                        {cfg.label}
+                      </Text> */}
+                    </View>
+                    <Feather
+                      name="chevron-right"
+                      size={12}
+                      color={C.textSecondary}
+                      style={{ marginTop: 3 }}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })
+          )}
         </View>
       )}
     </View>
@@ -217,64 +208,67 @@ const styles = StyleSheet.create({
     borderColor:      C.border,
   },
 
+  // ── Header ──
   header: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            12,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               10,
     paddingHorizontal: 10,
     paddingVertical:   13,
   },
   iconBg: {
-    width: 34, height: 34, borderRadius: 10,
+    width:           34,
+    height:          34,
+    borderRadius:    10,
     backgroundColor: C.primary + '15',
-    justifyContent: 'center', alignItems: 'center',
+    justifyContent:  'center',
+    alignItems:      'center',
   },
   iconBgActive: { backgroundColor: C.primary },
   headerText:   { flex: 1 },
-  headerLabel:  { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: C.text },
-  headerDesc:   { fontSize: 11, fontFamily: 'Inter_400Regular',  color: C.textSecondary, marginTop: 1 },
-
-  body: {
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    paddingHorizontal: 10,
-    paddingBottom:     10,
-    gap: 6,
+  headerLabel: {
+    fontSize:   14,
+    fontFamily: 'Inter_600SemiBold',
+    color:      C.text,
   },
-
-  searchRow: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    backgroundColor: C.card,
-    borderRadius:    10,
-    borderWidth:     1.5,
-    borderColor:     C.border,
-    marginTop:       8,
-  },
-  searchIcon:  { marginLeft: 10 },
-  searchInput: {
-    flex: 1,
-    paddingHorizontal: 8,
-    paddingVertical:   10,
-    fontSize:          13,
-    fontFamily:        'Inter_400Regular',
-    color:             C.text,
-  },
-
-  hint: {
+  headerDesc: {
     fontSize:   11,
     fontFamily: 'Inter_400Regular',
     color:      C.textSecondary,
-    textAlign:  'center',
-    paddingVertical: 8,
+    marginTop:  1,
+  },
+
+  // Badge rojo de pendientes en el header
+  badge: {
+    backgroundColor: '#DC2626',
+    borderRadius:    20,
+    minWidth:        18,
+    height:          18,
+    paddingHorizontal: 5,
+    justifyContent:  'center',
+    alignItems:      'center',
+  },
+  badgeText: {
+    fontSize:   10,
+    fontFamily: 'Inter_700Bold',
+    color:      '#fff',
+  },
+
+  // ── Body ──
+  body: {
+    borderTopWidth:    1,
+    borderTopColor:    C.border,
+    paddingHorizontal: 8,
+    paddingVertical:   8,
+    gap:               5,
   },
 
   emptyMsg: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'center',
-    gap:            6,
-    paddingVertical: 12,
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'center',
+    gap:             6,
+    paddingVertical: 14,
   },
   emptyText: {
     fontSize:   12,
@@ -282,27 +276,66 @@ const styles = StyleSheet.create({
     color:      C.textSecondary,
   },
 
+  // ── Item / botón ──
   item: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            10,
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             9,
     backgroundColor: C.card,
-    borderRadius:   10,
-    padding:        10,
-    borderWidth:    1,
-    borderColor:    C.border,
-    marginTop:      4,
+    borderRadius:    10,
+    padding:         10,
+    borderWidth:     1,
+    borderColor:     C.border,
   },
-  itemIconBg: {
-    width: 28, height: 28, borderRadius: 8,
+  itemPressed: {
+    opacity:         0.72,
+    backgroundColor: C.primary + '08',
+  },
+
+  indexBg: {
+    width:           26,
+    height:          26,
+    borderRadius:    8,
     backgroundColor: C.primary + '12',
-    justifyContent: 'center', alignItems: 'center',
+    justifyContent:  'center',
+    alignItems:      'center',
+    flexShrink:      0,
+  },
+  indexText: {
+    fontSize:   11,
+    fontFamily: 'Inter_700Bold',
+    color:      C.primary,
+  },
+
+  itemContent: { flex: 1 },
+  itemDir: {
+    fontSize:   12,
+    fontFamily: 'Inter_600SemiBold',
+    color:      C.text,
+    lineHeight: 16,
+  },
+  itemNombre: {
+    fontSize:   11,
+    fontFamily: 'Inter_400Regular',
+    color:      C.textSecondary,
+    marginTop:  2,
+  },
+
+  itemRight: {
+    alignItems: 'center',
+    gap:        2,
     flexShrink: 0,
   },
-  itemText:   { flex: 1 },
-  itemDir:    { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: C.text, lineHeight: 16 },
-  itemNombre: { fontSize: 11, fontFamily: 'Inter_400Regular',  color: C.textSecondary, marginTop: 2 },
-  itemRight:  { alignItems: 'center', gap: 2 },
-  estadoBadge:{ borderRadius: 20, paddingHorizontal: 6, paddingVertical: 2 },
-  estadoText: { fontSize: 10, fontFamily: 'Inter_600SemiBold' },
+  estadoBadge: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             3,
+    borderRadius:    20,
+    paddingHorizontal: 6,
+    paddingVertical:   2,
+  },
+  estadoText: {
+    fontSize:   10,
+    fontFamily: 'Inter_600SemiBold',
+  },
 });

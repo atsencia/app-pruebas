@@ -11,9 +11,7 @@ import {
   Alert,
   Animated,
   TouchableOpacity,
-  Dimensions,
 } from "react-native";
-import { subirFormularioFTP } from "@/services/FtpuploadServices";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -31,10 +29,7 @@ import { useUploadQueue } from '@/hooks/useUploadQueue';
 import QueueStatusBar from '@/components/QueueStatusBar';
 import ActasMovistar from '@/components/ActasMovistar';
 
-
-
-
-const C           = Colors.light;
+const C             = Colors.light;
 const SIDEBAR_WIDTH = 260;
 
 // ─────────────────────────────────────────────
@@ -64,44 +59,32 @@ export interface VideoItem {
 
 export interface FormData {
   tipoActa: "inicio" | "seguimiento" | "cierre" | "";
-
   nombre:     string;
   cedula:     string;
   direccion:  string;
   telefono:   string;
   propCorreo: string;
-
-  // Campo extra UI — zona/apartamento (se concatena a direccion al enviar)
   tieneZona:  boolean;
   zonaDesc:   string;
-
-  // Interventoría — campos completos en observaciones
   interCorreo: string;
   interNombre: string;
   interCargo:  string;
-
-  firmaConcesionario: FirmaPersona;
-  firmaProfesional:   FirmaPersona;
-
-  // Firma del dueño del predio
+  firmaConcesionario:    FirmaPersona;
+  firmaProfesional:      FirmaPersona;
   firmaPropietarioPredio: FirmaPropietarioPredio;
-
   latitud:  number | null;
   longitud: number | null;
-
   longitudFrenteYFondo: string;
   numeroPisos:          string;
   estrato:              string;
   anioConstruccion:     string;
   estaOcupada:          boolean;
-
   servicioAgua:           string;
   servicioAlcantarillado: string;
   servicioEnergia:        string;
   servicioTelefono:       string;
   servicioGas:            string;
   servicioOtros:          string;
-
   usoResidencial:   string;
   usoComercial:     string;
   usoIndustrial:    string;
@@ -111,30 +94,24 @@ export interface FormData {
   usoBIC:           string;
   usoMixto:         string;
   usoOtro:          string;
-
   tieneGaraje:          boolean;
   cantidadGarajes:      string;
   usoGaraje:            string;
   usoGarajeComercial:   string;
   usoGarajeResidencial: string;
   anchoAccesoVehicular: string;
-
   fisurasCerradas:     boolean;
   fisurasCerradasDesc: string;
   fisurasAbiertas:     boolean;
   fisurasAbiertasDesc: string;
   grietas:             boolean;
   grietasDesc:         string;
-
   acabadosPisos: string;
   estadoFachada: string;
-
   verticalidad:      boolean;
   verticalidadNotas: string;
-
   planTopografico:          boolean;
   observacionesProfesional: string;
-
   fotos:        { uri: string; descripcion: string }[];
   fotosFachada: { uri: string; descripcion: string }[];
   videos:       VideoItem[];
@@ -164,8 +141,6 @@ const SERVICIOS = [
   { key: "servicioGas",            label: "Gas"            },
 ] as const;
 
-// "Otros" en servicios es campo libre — se maneja aparte
-
 const USOS_ACTUALES = [
   { key: "usoResidencial",   label: "Residencial"              },
   { key: "usoComercial",     label: "Comercial"                },
@@ -179,18 +154,17 @@ const USOS_ACTUALES = [
 ] as const;
 
 const SIDEBAR_ITEMS: { icon: any; label: string; route: string; description: string }[] = [
- { icon: "upload-cloud", label: "Cola de subida", route: "/queue", description: "Ver estado de los envíos" }, 
-  { icon: "search",   label: "Buscar registros",   route: "/search",         description: "Consultar actas existentes" },
-  { icon: "users",    label: "Crear usuario",       route: "/createUser",     description: "Solo administradores"       },
-  { icon: "settings", label: "Gestionar usuarios",  route: "/userManagement", description: "Solo administradores"       },
+  { icon: "upload-cloud", label: "Cola de subida",    route: "/queue",         description: "Ver estado de los envíos"  },
+  { icon: "search",       label: "Buscar registros",  route: "/search",        description: "Consultar actas existentes"},
+  { icon: "users",        label: "Crear usuario",     route: "/createUser",    description: "Solo administradores"      },
+  { icon: "settings",     label: "Gestionar usuarios",route: "/userManagement",description: "Solo administradores"      },
 ];
 
-// Opciones dropdown
 const SERVICIO_OPTIONS = ["Si", "No", "No Aplica"];
 const USO_OPTIONS      = ["Si", "No", "N/A"];
 
 // ─────────────────────────────────────────────
-// COMPONENTE: SELECT FIELD (dropdown nativo)
+// SUB-COMPONENTE: SELECT FIELD
 // ─────────────────────────────────────────────
 
 interface SelectFieldProps {
@@ -198,23 +172,17 @@ interface SelectFieldProps {
   value:    string;
   options:  string[];
   onChange: (v: string) => void;
-  defaultEmpty?: string; // valor a mostrar si está vacío (placeholder)
+  defaultEmpty?: string;
 }
 
 function SelectField({ label, value, options, onChange, defaultEmpty }: SelectFieldProps) {
   const [open, setOpen] = useState(false);
   const displayValue = value || defaultEmpty || options[0];
-
   return (
     <View style={styles.fieldContainer}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <Pressable
-        style={[styles.input, styles.selectBtn]}
-        onPress={() => setOpen(!open)}
-      >
-        <Text style={[styles.selectBtnText, !value && { color: C.textSecondary }]}>
-          {displayValue}
-        </Text>
+      <Pressable style={[styles.input, styles.selectBtn]} onPress={() => setOpen(!open)}>
+        <Text style={[styles.selectBtnText, !value && { color: C.textSecondary }]}>{displayValue}</Text>
         <Feather name={open ? "chevron-up" : "chevron-down"} size={14} color={C.textSecondary} />
       </Pressable>
       {open && (
@@ -225,9 +193,7 @@ function SelectField({ label, value, options, onChange, defaultEmpty }: SelectFi
               style={[styles.selectOption, value === opt && styles.selectOptionActive]}
               onPress={() => { onChange(opt); setOpen(false); }}
             >
-              <Text style={[styles.selectOptionText, value === opt && styles.selectOptionTextActive]}>
-                {opt}
-              </Text>
+              <Text style={[styles.selectOptionText, value === opt && styles.selectOptionTextActive]}>{opt}</Text>
               {value === opt && <Feather name="check" size={13} color={C.primary} />}
             </Pressable>
           ))}
@@ -238,39 +204,28 @@ function SelectField({ label, value, options, onChange, defaultEmpty }: SelectFi
 }
 
 // ─────────────────────────────────────────────
-// COMPONENTE: SECCIÓN COLAPSABLE DE FIRMA
+// SUB-COMPONENTE: FIRMA SECTION (colapsable)
 // ─────────────────────────────────────────────
 
 interface FirmaSectionProps {
-  icon: any;
-  title: string;
-  signed: boolean;
-  children: React.ReactNode;
+  icon: any; title: string; signed: boolean; children: React.ReactNode;
 }
 
 function FirmaSection({ icon, title, signed, children }: FirmaSectionProps) {
   const [open, setOpen] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
-
   const toggle = () => {
     const toValue = open ? 0 : 1;
     setOpen(!open);
     Animated.timing(anim, { toValue, duration: 220, useNativeDriver: false }).start();
   };
-
-  const bgColor = signed ? "#E6F4EA" : C.card;
+  const bgColor     = signed ? "#E6F4EA" : C.card;
   const borderColor = signed ? "#4CAF50" : C.border;
   const iconBgColor = signed ? "#C8E6C9" : C.primary + "15";
   const iconColor   = signed ? "#2E7D32" : C.primary;
-  const chevron = open ? "chevron-up" : "chevron-down";
-
   return (
     <View style={[styles.section, { backgroundColor: bgColor, borderWidth: signed ? 1.5 : 0, borderColor }]}>
-      <Pressable
-        style={styles.sectionHeader}
-        onPress={toggle}
-        android_ripple={{ color: "rgba(0,0,0,0.05)" }}
-      >
+      <Pressable style={styles.sectionHeader} onPress={toggle} android_ripple={{ color: "rgba(0,0,0,0.05)" }}>
         <View style={[styles.sectionIconBg, { backgroundColor: iconBgColor }]}>
           <Feather name={icon} size={14} color={iconColor} />
         </View>
@@ -281,7 +236,7 @@ function FirmaSection({ icon, title, signed, children }: FirmaSectionProps) {
             <Text style={styles.sigBadgeText}>Firmado</Text>
           </View>
         )}
-        <Feather name={chevron} size={16} color={signed ? "#2E7D32" : C.textSecondary} style={{ marginLeft: "auto" }} />
+        <Feather name={open ? "chevron-up" : "chevron-down"} size={16} color={signed ? "#2E7D32" : C.textSecondary} style={{ marginLeft: "auto" }} />
       </Pressable>
       {open && <View style={styles.sectionBody}>{children}</View>}
     </View>
@@ -293,8 +248,7 @@ function FirmaSection({ icon, title, signed, children }: FirmaSectionProps) {
 // ─────────────────────────────────────────────
 
 export default function FormScreen() {
-const { agregarALaCola } = useUploadQueue();
-
+  const { agregarALaCola } = useUploadQueue();
   const form      = useFormStore((state) => state.formData);
   const setField  = useFormStore((state) => state.setField);
   const clearForm = useFormStore((state) => state.clearForm);
@@ -305,13 +259,11 @@ const { agregarALaCola } = useUploadQueue();
 
   const insets           = useSafeAreaInsets();
   const { user, logout } = useAuth();
-
-  // ── Sidebar ──────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // ── Cargar acta existente ──────────────────
   useEffect(() => {
     if (!registro_uuid) return;
-
     const cargarActa = async () => {
       setLoadingActa(true);
       try {
@@ -321,67 +273,66 @@ const { agregarALaCola } = useUploadQueue();
         );
         if (!response.ok) throw new Error("No se pudo cargar el acta");
         const data = await response.json();
-
         const f = data.acta;
-          setField("tipoActa",    f.tipoActa    ?? "");
-          setField("nombre",      f.nombre      ?? "");
-          setField("cedula",      f.cedula      ?? "");
-          setField("direccion",   f.direccion   ?? "");
-          setField("telefono",    f.telefono    ?? "");
-          setField("propCorreo",  f.firmaPropietario?.correo   ?? "");
-          setField("interCorreo", f.firmaInterventoria?.correo ?? "");
-          setField("interNombre", f.firmaInterventoria?.nombre ?? "");
-          setField("interCargo",  f.firmaInterventoria?.cargo  ?? "");
-          setField("latitud",     f.georef?.latitud  ?? f.latitud  ?? null);
-          setField("longitud",    f.georef?.longitud ?? f.longitud ?? null);
-          setField("numeroPisos",          f.numeroPisos          ?? "");
-          setField("estrato",              f.estrato              ?? "");
-          setField("anioConstruccion",     f.anioConstruccion     ?? "");
-          setField("longitudFrenteYFondo", f.longitudFrenteYFondo ??  "");
-          setField("estaOcupada",          f.estaOcupada          ??  false);
-          setField("servicioAgua",           f.servicioAgua           ??  "");
-          setField("servicioAlcantarillado", f.servicioAlcantarillado ??  "");
-          setField("servicioEnergia",        f.servicioEnergia        ??  "");
-          setField("servicioTelefono",       f.servicioTelefono       ?? "");
-          setField("servicioGas",            f.servicioGas            ?? "");
-          setField("servicioOtros",          f.servicioOtros          ?? "");
-          setField("tieneGaraje",          f.tieneGaraje          ?? false);
-          setField("cantidadGarajes",      f.cantidadGarajes      ?? "");
-          setField("anchoAccesoVehicular", f.anchoAccesoVehicular ?? "");
-          setField("fisurasCerradas",     f.fisurasCerradas     ?? false);
-          setField("fisurasCerradasDesc", f.fisurasCerradasDesc ?? "");
-          setField("fisurasAbiertas",     f.fisurasAbiertas     ?? false);
-          setField("fisurasAbiertasDesc", f.fisurasAbiertasDesc ?? "");
-          setField("grietas",             f.grietas             ?? false);
-          setField("grietasDesc",         f.grietasDesc         ?? "");
-          setField("acabadosPisos",  f.acabadosPisos  ?? "");
-          setField("estadoFachada",  f.estadoFachada  ?? "");
-          setField("verticalidad",      f.verticalidad      ?? false);
-          setField("verticalidadNotas", f.verticalidadNotas ?? "");
-          setField("planTopografico",          f.planTopografico          ?? false);
-          setField("observacionesProfesional", f.observacionesProfesional ?? "");
-          setField("firmaConcesionario",     f.firmaConcesionario     ?? { nombre: "", cedula: "", cargo: "", firma: null });
-          setField("firmaProfesional",       f.firmaProfesional       ?? { nombre: "", cedula: "", cargo: "", firma: null });
-          setField("firmaPropietarioPredio", f.firmaPropietarioPredio ?? { nombre: "", correo: "", celular: "", firma: null });
-          setField("fotos", data.multimedia?.fotos?.map((ff: any) => ({
-            uri: ff.url, descripcion: ff.descripcion ?? "",
-          })) ?? []);
-          setField("fotosFachada", data.multimedia?.fotosFachada?.map((ff: any) => ({
-            uri: ff.url, descripcion: ff.descripcion ?? "",
-          })) ?? []);
-          setField("videos", data.multimedia?.videos?.map((v: any) => ({
-            uri: v.url, thumbnail: null, duration: null, filename: v.nombre,
-          })) ?? []);
+        setField("tipoActa",    f.tipoActa    ?? "");
+        setField("nombre",      f.nombre      ?? "");
+        setField("cedula",      f.cedula      ?? "");
+        setField("direccion",   f.direccion   ?? "");
+        setField("telefono",    f.telefono    ?? "");
+        setField("propCorreo",  f.firmaPropietario?.correo   ?? "");
+        setField("interCorreo", f.firmaInterventoria?.correo ?? "");
+        setField("interNombre", f.firmaInterventoria?.nombre ?? "");
+        setField("interCargo",  f.firmaInterventoria?.cargo  ?? "");
+        setField("latitud",     f.georef?.latitud  ?? f.latitud  ?? null);
+        setField("longitud",    f.georef?.longitud ?? f.longitud ?? null);
+        setField("numeroPisos",          f.numeroPisos          ?? "");
+        setField("estrato",              f.estrato              ?? "");
+        setField("anioConstruccion",     f.anioConstruccion     ?? "");
+        setField("longitudFrenteYFondo", f.longitudFrenteYFondo ?? "");
+        setField("estaOcupada",          f.estaOcupada          ?? false);
+        setField("servicioAgua",           f.servicioAgua           ?? "");
+        setField("servicioAlcantarillado", f.servicioAlcantarillado ?? "");
+        setField("servicioEnergia",        f.servicioEnergia        ?? "");
+        setField("servicioTelefono",       f.servicioTelefono       ?? "");
+        setField("servicioGas",            f.servicioGas            ?? "");
+        setField("servicioOtros",          f.servicioOtros          ?? "");
+        setField("tieneGaraje",          f.tieneGaraje          ?? false);
+        setField("cantidadGarajes",      f.cantidadGarajes      ?? "");
+        setField("anchoAccesoVehicular", f.anchoAccesoVehicular ?? "");
+        setField("fisurasCerradas",     f.fisurasCerradas     ?? false);
+        setField("fisurasCerradasDesc", f.fisurasCerradasDesc ?? "");
+        setField("fisurasAbiertas",     f.fisurasAbiertas     ?? false);
+        setField("fisurasAbiertasDesc", f.fisurasAbiertasDesc ?? "");
+        setField("grietas",             f.grietas             ?? false);
+        setField("grietasDesc",         f.grietasDesc         ?? "");
+        setField("acabadosPisos",  f.acabadosPisos  ?? "");
+        setField("estadoFachada",  f.estadoFachada  ?? "");
+        setField("verticalidad",      f.verticalidad      ?? false);
+        setField("verticalidadNotas", f.verticalidadNotas ?? "");
+        setField("planTopografico",          f.planTopografico          ?? false);
+        setField("observacionesProfesional", f.observacionesProfesional ?? "");
+        setField("firmaConcesionario",     f.firmaConcesionario     ?? { nombre: "", cedula: "", cargo: "", firma: null });
+        setField("firmaProfesional",       f.firmaProfesional       ?? { nombre: "", cedula: "", cargo: "", firma: null });
+        setField("firmaPropietarioPredio", f.firmaPropietarioPredio ?? { nombre: "", correo: "", celular: "", firma: null });
+        setField("fotos", data.multimedia?.fotos?.map((ff: any) => ({
+          uri: ff.url, descripcion: ff.descripcion ?? "",
+        })) ?? []);
+        setField("fotosFachada", data.multimedia?.fotosFachada?.map((ff: any) => ({
+          uri: ff.url, descripcion: ff.descripcion ?? "",
+        })) ?? []);
+        setField("videos", data.multimedia?.videos?.map((v: any) => ({
+          uri: v.url, thumbnail: null, duration: null, filename: v.nombre,
+        })) ?? []);
       } catch (e: any) {
         Alert.alert("Error", "No se pudo cargar el acta para editar");
       } finally {
         setLoadingActa(false);
       }
     };
-
     cargarActa();
   }, [registro_uuid, user?.token]);
 
+  // ── Sidebar ────────────────────────────────
   const sidebarAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
   const openSidebar = () => {
@@ -399,21 +350,15 @@ const { agregarALaCola } = useUploadQueue();
     setTimeout(() => router.push(route as any), 240);
   };
 
+  // ── Cargar acta Movistar desde sidebar ─────
   const cargarActaMovistar = (uuid: string) => {
-  // 1. Cerrar sidebar
-  closeSidebar();
-  // 2. Navegar al mismo form con el registro_uuid
-  //    Esto dispara el useEffect de cargarActa que ya tienes
-  setTimeout(() => {
-    router.push({
-      pathname: '/form',
-      params:   { registro_uuid: uuid },
-    } as any);
-  }, 240);
-};
+    closeSidebar();
+    setTimeout(() => {
+      router.push({ pathname: '/form', params: { registro_uuid: uuid } } as any);
+    }, 240);
+  };
 
   // ── Estado del formulario ──────────────────
-
   const [errors,       setErrors]      = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -434,25 +379,24 @@ const { agregarALaCola } = useUploadQueue();
   const setFirmaProp = (field: keyof FirmaPropietarioPredio, value: any) =>
     setField("firmaPropietarioPredio", { ...form.firmaPropietarioPredio, [field]: value });
 
-  // Dirección final concatenada con zona (para enviar al backend)
-const direccionFinal = (): string => {
-  const base = (form.direccion ?? "").trim();
-  if (form.tieneZona && (form.zonaDesc ?? "").trim()) {
-    return `${base}, ${(form.zonaDesc ?? "").trim()}`;
-  }
-  return base;
-};
+  const direccionFinal = (): string => {
+    const base = (form.direccion ?? "").trim();
+    if (form.tieneZona && (form.zonaDesc ?? "").trim()) {
+      return `${base}, ${(form.zonaDesc ?? "").trim()}`;
+    }
+    return base;
+  };
 
   // ── Validación ──────────────────────────────
   const validate = (): boolean => {
-    const e: FieldErrors = {};  
-    if (!(form.nombre   ?? "").trim()) e.nombre    = "El nombre es requerido";
+    const e: FieldErrors = {};
+    if (!(form.nombre ?? "").trim()) e.nombre = "El nombre es requerido";
     if (!(form.cedula ?? "").trim()) {
       e.cedula = "La cédula es requerida";
     } else if (!/^\d{6,12}$/.test((form.cedula ?? "").trim())) {
       e.cedula = "La cédula debe tener entre 6 y 12 dígitos";
-    }    
-  if (!(form.direccion ?? "").trim()) e.direccion = "La dirección es requerida";
+    }
+    if (!(form.direccion ?? "").trim()) e.direccion = "La dirección es requerida";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -460,10 +404,10 @@ const direccionFinal = (): string => {
   // ── JSON objetivo ───────────────────────────
   const buildDatos = () => ({
     tipoActa:  form.tipoActa,
-    nombre:    (form.nombre      ?? "").trim(),
-    cedula:    (form.cedula      ?? "").trim(),
-    direccion: direccionFinal(),   // ← dirección con zona concatenada
-    telefono:  (form.telefono    ?? "").trim(),
+    nombre:    (form.nombre   ?? "").trim(),
+    cedula:    (form.cedula   ?? "").trim(),
+    direccion: direccionFinal(),
+    telefono:  (form.telefono ?? "").trim(),
     georef:    { latitud: form.latitud, longitud: form.longitud },
     latitud:   form.latitud,
     longitud:  form.longitud,
@@ -507,11 +451,11 @@ const direccionFinal = (): string => {
     planTopograficoArchivo:   null,
     observacionesProfesional: form.observacionesProfesional,
     firmaPropietario: {
-      nombre: (form.nombre ?? "").trim(),
-      cedula: (form.cedula ?? "").trim(),
+      nombre: (form.nombre    ?? "").trim(),
+      cedula: (form.cedula    ?? "").trim(),
       cargo:  "",
       firma:  null,
-      correo: (form.propCorreo  ?? "").trim(),
+      correo: (form.propCorreo ?? "").trim(),
     },
     firmaInterventoria: {
       nombre: (form.interNombre ?? "").trim(),
@@ -520,8 +464,8 @@ const direccionFinal = (): string => {
       firma:  null,
       correo: (form.interCorreo ?? "").trim(),
     },
-    firmaConcesionario:    form.firmaConcesionario,
-    firmaProfesional:      form.firmaProfesional,
+    firmaConcesionario:     form.firmaConcesionario,
+    firmaProfesional:       form.firmaProfesional,
     firmaPropietarioPredio: form.firmaPropietarioPredio,
     fotosCount:        form.fotos.length,
     fotosFachadaCount: form.fotosFachada.length,
@@ -529,52 +473,46 @@ const direccionFinal = (): string => {
   });
 
   // ── Submit ──────────────────────────────────
- 
-const handleSubmit = async () => {
-  if (!validate()) {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    return;
-  }
-
-  setIsSubmitting(true);
-  try {
-    const formulario = {
-      nombre:        (form.nombre ?? '').trim(),
-      apellido:      (form.cedula ?? '').trim(),
-      direccion:     direccionFinal(),
-      georef:        { latitud: form.latitud, longitud: form.longitud },
-      fotos:         form.fotos,
-      fotosFachada:  form.fotosFachada,
-      videos:        form.videos.map((v: any) => ({ uri: v.uri })),
-      extra:         buildDatos(),
-      registro_uuid: isEditing ? registro_uuid : undefined,
-      revisado_por:  user?.username ?? null,
-    };
-
-    await agregarALaCola(formulario);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    // Navegar a success inmediatamente — la subida ocurre en background
-    router.push({
-      pathname: '/success',
-      params: {
-        numeroRegistro:    formulario.registro_uuid ?? 'En cola',
-        nombre:            (form.nombre ?? '').trim(),
-        fotosCount:        String(form.fotos.length),
-        fotosFachadaCount: String(form.fotosFachada.length),
-        videosCount:       String(form.videos.length),
-        enCola:            'true',  // para que success muestre mensaje distinto
-      },
-    });
-
-    clearForm();
-  } catch (e: any) {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    Alert.alert('Error', e.message || 'No se pudo encolar el registro');
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  const handleSubmit = async () => {
+    if (!validate()) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const formulario = {
+        nombre:        (form.nombre ?? '').trim(),
+        apellido:      (form.cedula ?? '').trim(),
+        direccion:     direccionFinal(),
+        georef:        { latitud: form.latitud, longitud: form.longitud },
+        fotos:         form.fotos,
+        fotosFachada:  form.fotosFachada,
+        videos:        form.videos.map((v: any) => ({ uri: v.uri })),
+        extra:         buildDatos(),
+        registro_uuid: isEditing ? registro_uuid : undefined,
+        revisado_por:  user?.username ?? null,
+      };
+      await agregarALaCola(formulario);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push({
+        pathname: '/success',
+        params: {
+          numeroRegistro:    formulario.registro_uuid ?? 'En cola',
+          nombre:            (form.nombre ?? '').trim(),
+          fotosCount:        String(form.fotos.length),
+          fotosFachadaCount: String(form.fotosFachada.length),
+          videosCount:       String(form.videos.length),
+          enCola:            'true',
+        },
+      });
+      clearForm();
+    } catch (e: any) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', e.message || 'No se pudo encolar el registro');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleLogout = async () => { await logout(); router.replace("/login"); };
 
@@ -584,7 +522,7 @@ const handleSubmit = async () => {
   return (
     <View style={[styles.root, { backgroundColor: C.background }]}>
 
-      {/* TOP BAR */}
+      {/* ── TOP BAR ── */}
       <View style={[styles.topBar, { paddingTop: topPadding + 10, backgroundColor: C.primary }]}>
         <Pressable
           onPress={openSidebar}
@@ -594,7 +532,6 @@ const handleSubmit = async () => {
           <Feather name="menu" size={20} color="#fff" />
         </Pressable>
         <View style={styles.topBarCenter}>
-          
           <Text style={styles.topBarTitle}>
             {isEditing ? "Editar Registro" : "Nuevo Registro"}
           </Text>
@@ -609,7 +546,7 @@ const handleSubmit = async () => {
         </Pressable>
       </View>
 
-      {/* FORMULARIO */}
+      {/* ── FORMULARIO ── */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingBottom: bottomPadding + 32 }]}
@@ -643,21 +580,33 @@ const handleSubmit = async () => {
         </View>
 
         {/* 1. DATOS DEL VECINO / PROPIETARIO */}
-        <Section icon="user" title="Datos del Propietario">
+        <Section icon="user" title="Datos del Vecino / Propietario">
+
+          {/* Bloqueo visual cuando es edición desde Actas Movistar */}
+          {isEditing && (
+            <View style={styles.lockedBanner}>
+              <Feather name="lock" size={13} color="#7C3AED" />
+              <Text style={styles.lockedBannerText}>
+                Nombre, cédula y dirección bloqueados — vienen del registro pre-cargado
+              </Text>
+            </View>
+          )}
+
           <Field label="Nombre completo" error={errors.nombre}>
             <TextInput
-                        style={[styles.input, errors.nombre && styles.inputError, isEditing && styles.inputLocked]}
-                        placeholder="Ej. Juan García López"
-                        placeholderTextColor={C.textSecondary}
-                        value={form.nombre}
-                        onChangeText={(v) => {
-                          if (isEditing) return; // bloqueado
-                          set("nombre", v);
-                          if (errors.nombre) setErrors((e) => ({ ...e, nombre: undefined }));
-                        }}
-                        editable={!isEditing}
-                      />
+              style={[styles.input, errors.nombre && styles.inputError, isEditing && styles.inputLocked]}
+              placeholder="Ej. Juan García López"
+              placeholderTextColor={C.textSecondary}
+              value={form.nombre}
+              onChangeText={(v) => {
+                if (isEditing) return;
+                set("nombre", v);
+                if (errors.nombre) setErrors((e) => ({ ...e, nombre: undefined }));
+              }}
+              editable={!isEditing}
+            />
           </Field>
+
           <Field label="Cédula de identidad" error={errors.cedula}>
             <TextInput
               style={[styles.input, errors.cedula && styles.inputError, isEditing && styles.inputLocked]}
@@ -674,50 +623,48 @@ const handleSubmit = async () => {
               editable={!isEditing}
             />
           </Field>
+
           <View style={styles.row}>
             <View style={styles.rowHalf}>
               <Field label="Teléfono">
                 <TextInput
-                  style={[styles.input, styles.inputMultiline, errors.direccion && styles.inputError, isEditing && styles.inputLocked]}
-                  placeholder="Calle, número, barrio, ciudad..."
+                  style={styles.input}
+                  placeholder="Ej. 3001234567"
                   placeholderTextColor={C.textSecondary}
-                  value={form.direccion}
-                  onChangeText={(v) => {
-                    if (isEditing) return;
-                    set("direccion", v);
-                    if (errors.direccion) setErrors((e) => ({ ...e, direccion: undefined }));
-                  }}
-                  multiline
-                  numberOfLines={3}
-                  editable={!isEditing}
+                  value={form.telefono}
+                  onChangeText={(v) => set("telefono", v.replace(/\D/g, ""))}
+                  keyboardType="phone-pad"
+                  maxLength={15}
                 />
               </Field>
             </View>
           </View>
+
           <Field label="Dirección" error={errors.direccion}>
             <TextInput
-              style={[styles.input, styles.inputMultiline, errors.direccion && styles.inputError]}
+              style={[styles.input, styles.inputMultiline, errors.direccion && styles.inputError, isEditing && styles.inputLocked]}
               placeholder="Calle, número, barrio, ciudad..."
               placeholderTextColor={C.textSecondary}
               value={form.direccion}
-              onChangeText={(v) => { set("direccion", v); if (errors.direccion) setErrors((e) => ({ ...e, direccion: undefined })); }}
+              onChangeText={(v) => {
+                if (isEditing) return;
+                set("direccion", v);
+                if (errors.direccion) setErrors((e) => ({ ...e, direccion: undefined }));
+              }}
               multiline
               numberOfLines={3}
+              editable={!isEditing}
             />
           </Field>
 
-          {/* ── ZONA / APARTAMENTO ────────────────────── */}
+          {/* ZONA / APARTAMENTO */}
           <ToggleField
             label="¿El predio se divide en zonas / apartamentos?"
             value={form.tieneZona ?? false}
-            onChange={(v) => {
-              set("tieneZona", v);
-              if (!v) set("zonaDesc", "");
-            }}
+            onChange={(v) => { set("tieneZona", v); if (!v) set("zonaDesc", ""); }}
           />
-          {(form.tieneZona) && (
+          {form.tieneZona && (
             <View style={styles.zonaContainer}>
-              {/* <Feather name="layers" size={13} color={C.primary} style={{ marginTop: 2 }} /> */}
               <View style={{ flex: 1, gap: 6 }}>
                 <TextInput
                   style={[styles.input, styles.zonaInput]}
@@ -739,41 +686,23 @@ const handleSubmit = async () => {
               </View>
             </View>
           )}
-          {/* ────────────────────────────────────────────── */}
-
         </Section>
 
         {/* 2. INTERVENTORÍA */}
         <Section icon="briefcase" title="Interventoría">
           <InfoBox text="Datos del representante delegado. Esta información se guardará en observaciones del acta." />
           <Field label="Nombre del delegado">
-            <TextInput
-              style={styles.input}
-              placeholder="Nombre y apellidos"
-              placeholderTextColor={C.textSecondary}
-              value={form.interNombre}
-              onChangeText={(v) => set("interNombre", v)}
-            />
+            <TextInput style={styles.input} placeholder="Nombre y apellidos" placeholderTextColor={C.textSecondary}
+              value={form.interNombre} onChangeText={(v) => set("interNombre", v)} />
           </Field>
           <Field label="Cargo">
-            <TextInput
-              style={styles.input}
-              placeholder="Ej. Ingeniero Inspector"
-              placeholderTextColor={C.textSecondary}
-              value={form.interCargo}
-              onChangeText={(v) => set("interCargo", v)}
-            />
+            <TextInput style={styles.input} placeholder="Ej. Ingeniero Inspector" placeholderTextColor={C.textSecondary}
+              value={form.interCargo} onChangeText={(v) => set("interCargo", v)} />
           </Field>
           <Field label="Correo del delegado">
-            <TextInput
-              style={styles.input}
-              placeholder="interventoria@correo.com"
-              placeholderTextColor={C.textSecondary}
-              value={form.interCorreo}
-              onChangeText={(v) => set("interCorreo", v.trim())}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+            <TextInput style={styles.input} placeholder="interventoria@correo.com" placeholderTextColor={C.textSecondary}
+              value={form.interCorreo} onChangeText={(v) => set("interCorreo", v.trim())}
+              keyboardType="email-address" autoCapitalize="none" />
           </Field>
         </Section>
 
@@ -782,64 +711,33 @@ const handleSubmit = async () => {
           <View style={styles.row}>
             <View style={styles.rowHalf}>
               <Field label="Frente y fondo (m)">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 20"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.longitudFrenteYFondo}
-                  onChangeText={(v) => set("longitudFrenteYFondo", v)}
-                  keyboardType="decimal-pad"
-                />
+                <TextInput style={styles.input} placeholder="Ej. 20" placeholderTextColor={C.textSecondary}
+                  value={form.longitudFrenteYFondo} onChangeText={(v) => set("longitudFrenteYFondo", v)} keyboardType="decimal-pad" />
               </Field>
             </View>
             <View style={styles.rowHalf}>
               <Field label="No. de pisos">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 2"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.numeroPisos}
-                  onChangeText={(v) => set("numeroPisos", v.replace(/\D/g, ""))}
-                  keyboardType="numeric"
-                  maxLength={2}
-                />
+                <TextInput style={styles.input} placeholder="Ej. 2" placeholderTextColor={C.textSecondary}
+                  value={form.numeroPisos} onChangeText={(v) => set("numeroPisos", v.replace(/\D/g, ""))} keyboardType="numeric" maxLength={2} />
               </Field>
             </View>
           </View>
           <View style={styles.row}>
             <View style={styles.rowHalf}>
               <Field label="Estrato">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 3"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.estrato}
-                  onChangeText={(v) => set("estrato", v.replace(/\D/g, ""))}
-                  keyboardType="numeric"
-                  maxLength={1}
-                />
+                <TextInput style={styles.input} placeholder="Ej. 3" placeholderTextColor={C.textSecondary}
+                  value={form.estrato} onChangeText={(v) => set("estrato", v.replace(/\D/g, ""))} keyboardType="numeric" maxLength={1} />
               </Field>
             </View>
             <View style={styles.rowHalf}>
               <Field label="Año construcción">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 1998"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.anioConstruccion}
-                  onChangeText={(v) => set("anioConstruccion", v.replace(/\D/g, ""))}
-                  keyboardType="numeric"
-                  maxLength={4}
-                />
+                <TextInput style={styles.input} placeholder="Ej. 1998" placeholderTextColor={C.textSecondary}
+                  value={form.anioConstruccion} onChangeText={(v) => set("anioConstruccion", v.replace(/\D/g, ""))} keyboardType="numeric" maxLength={4} />
               </Field>
             </View>
           </View>
           <View style={styles.divider} />
-          <ToggleField
-            label="¿Está ocupada actualmente?"
-            value={form.estaOcupada}
-            onChange={(v) => set("estaOcupada", v)}
-          />
+          <ToggleField label="¿Está ocupada actualmente?" value={form.estaOcupada} onChange={(v) => set("estaOcupada", v)} />
         </Section>
 
         {/* 4. SERVICIOS PÚBLICOS */}
@@ -848,25 +746,15 @@ const handleSubmit = async () => {
           <View style={styles.servicesGrid}>
             {SERVICIOS.map(({ key, label }) => (
               <View key={key} style={styles.serviceItem}>
-                <SelectField
-                  label={label}
-                  value={(form as any)[key]}
-                  options={SERVICIO_OPTIONS}
-                  onChange={(v) => set(key as keyof FormData, v)}
-                  defaultEmpty="No Aplica"
-                />
+                <SelectField label={label} value={(form as any)[key]} options={SERVICIO_OPTIONS}
+                  onChange={(v) => set(key as keyof FormData, v)} defaultEmpty="No Aplica" />
               </View>
             ))}
-            {/* Otros — campo libre */}
             <View style={styles.serviceItem}>
               <Field label="Otros">
-                <TextInput
-                  style={[styles.input, styles.serviceInput]}
-                  placeholder="Describa cuál..."
-                  placeholderTextColor={C.textSecondary}
-                  value={form.servicioOtros}
-                  onChangeText={(v) => set("servicioOtros", v)}
-                />
+                <TextInput style={[styles.input, styles.serviceInput]} placeholder="Describa cuál..."
+                  placeholderTextColor={C.textSecondary} value={form.servicioOtros}
+                  onChangeText={(v) => set("servicioOtros", v)} />
               </Field>
             </View>
           </View>
@@ -879,13 +767,8 @@ const handleSubmit = async () => {
             <View key={key} style={styles.usoRow}>
               <Text style={styles.usoLabel}>{label}</Text>
               <View style={styles.usoInputContainer}>
-                <SelectField
-                  label=""
-                  value={(form as any)[key]}
-                  options={USO_OPTIONS}
-                  onChange={(v) => set(key as keyof FormData, v)}
-                  defaultEmpty="N/A"
-                />
+                <SelectField label="" value={(form as any)[key]} options={USO_OPTIONS}
+                  onChange={(v) => set(key as keyof FormData, v)} defaultEmpty="N/A" />
               </View>
             </View>
           ))}
@@ -893,319 +776,178 @@ const handleSubmit = async () => {
 
         {/* 6. ACCESO VEHICULAR */}
         <Section icon="truck" title="Acceso Vehicular">
-          <ToggleField
-            label="¿Tiene garaje?"
-            value={form.tieneGaraje}
-            onChange={(v) => set("tieneGaraje", v)}
-          />
+          <ToggleField label="¿Tiene garaje?" value={form.tieneGaraje} onChange={(v) => set("tieneGaraje", v)} />
           {form.tieneGaraje && (
             <>
               <View style={styles.row}>
                 <View style={styles.rowHalf}>
                   <Field label="Cantidad de garajes">
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Ej. 1"
-                      placeholderTextColor={C.textSecondary}
-                      value={form.cantidadGarajes}
-                      onChangeText={(v) => set("cantidadGarajes", v.replace(/\D/g, ""))}
-                      keyboardType="numeric"
-                      maxLength={2}
-                    />
+                    <TextInput style={styles.input} placeholder="Ej. 1" placeholderTextColor={C.textSecondary}
+                      value={form.cantidadGarajes} onChangeText={(v) => set("cantidadGarajes", v.replace(/\D/g, ""))} keyboardType="numeric" maxLength={2} />
                   </Field>
                 </View>
                 <View style={styles.rowHalf}>
                   <Field label="Se usa como">
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Ej. Tienda"
-                      placeholderTextColor={C.textSecondary}
-                      value={form.usoGaraje}
-                      onChangeText={(v) => set("usoGaraje", v)}
-                    />
+                    <TextInput style={styles.input} placeholder="Ej. Tienda" placeholderTextColor={C.textSecondary}
+                      value={form.usoGaraje} onChangeText={(v) => set("usoGaraje", v)} />
                   </Field>
                 </View>
               </View>
               <View style={styles.row}>
                 <View style={styles.rowHalf}>
                   <Field label="Uso comercial">
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Ej. Tienda"
-                      placeholderTextColor={C.textSecondary}
-                      value={form.usoGarajeComercial}
-                      onChangeText={(v) => set("usoGarajeComercial", v)}
-                    />
+                    <TextInput style={styles.input} placeholder="Ej. Tienda" placeholderTextColor={C.textSecondary}
+                      value={form.usoGarajeComercial} onChangeText={(v) => set("usoGarajeComercial", v)} />
                   </Field>
                 </View>
                 <View style={styles.rowHalf}>
                   <Field label="Uso residencial">
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Ej. Sí"
-                      placeholderTextColor={C.textSecondary}
-                      value={form.usoGarajeResidencial}
-                      onChangeText={(v) => set("usoGarajeResidencial", v)}
-                    />
+                    <TextInput style={styles.input} placeholder="Ej. Sí" placeholderTextColor={C.textSecondary}
+                      value={form.usoGarajeResidencial} onChangeText={(v) => set("usoGarajeResidencial", v)} />
                   </Field>
                 </View>
               </View>
             </>
           )}
           <Field label="Ancho de acceso vehicular (m)">
-            <TextInput
-              style={styles.input}
-              placeholder="Ej. 3.5"
-              placeholderTextColor={C.textSecondary}
-              value={form.anchoAccesoVehicular}
-              onChangeText={(v) => set("anchoAccesoVehicular", v)}
-              keyboardType="decimal-pad"
-            />
+            <TextInput style={styles.input} placeholder="Ej. 3.5" placeholderTextColor={C.textSecondary}
+              value={form.anchoAccesoVehicular} onChangeText={(v) => set("anchoAccesoVehicular", v)} keyboardType="decimal-pad" />
           </Field>
         </Section>
 
         {/* 7. EVALUACIÓN ESTRUCTURAL */}
         <Section icon="alert-triangle" title="Evaluación Estructural">
           <InfoBox text="Las fisuras son discontinuidades en muros, vigas, columnas, losas y placas de entrepiso." />
-          <ToggleField
-            label="Fisuras cerradas"
-            description="Discontinuidad cerrada que no afecta la calidad estructural."
-            value={form.fisurasCerradas}
-            onChange={(v) => set("fisurasCerradas", v)}
-          />
+          <ToggleField label="Fisuras cerradas" description="Discontinuidad cerrada que no afecta la calidad estructural."
+            value={form.fisurasCerradas} onChange={(v) => set("fisurasCerradas", v)} />
           {form.fisurasCerradas && (
-            <TextInput
-              style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
-              placeholder="Descripción de ubicación y alcance..."
-              placeholderTextColor={C.textSecondary}
-              value={form.fisurasCerradasDesc}
-              onChangeText={(v) => set("fisurasCerradasDesc", v)}
-              multiline numberOfLines={2}
-            />
+            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+              placeholder="Descripción de ubicación y alcance..." placeholderTextColor={C.textSecondary}
+              value={form.fisurasCerradasDesc} onChangeText={(v) => set("fisurasCerradasDesc", v)} multiline numberOfLines={2} />
           )}
           <View style={styles.divider} />
-          <ToggleField
-            label="Fisuras abiertas"
-            description="Discontinuidad abierta (0.2–2.0 mm) que puede afectar la estabilidad."
-            value={form.fisurasAbiertas}
-            onChange={(v) => set("fisurasAbiertas", v)}
-          />
+          <ToggleField label="Fisuras abiertas" description="Discontinuidad abierta (0.2–2.0 mm) que puede afectar la estabilidad."
+            value={form.fisurasAbiertas} onChange={(v) => set("fisurasAbiertas", v)} />
           {form.fisurasAbiertas && (
-            <TextInput
-              style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
-              placeholder="Descripción de ubicación y alcance..."
-              placeholderTextColor={C.textSecondary}
-              value={form.fisurasAbiertasDesc}
-              onChangeText={(v) => set("fisurasAbiertasDesc", v)}
-              multiline numberOfLines={2}
-            />
+            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+              placeholder="Descripción de ubicación y alcance..." placeholderTextColor={C.textSecondary}
+              value={form.fisurasAbiertasDesc} onChangeText={(v) => set("fisurasAbiertasDesc", v)} multiline numberOfLines={2} />
           )}
           <View style={styles.divider} />
-          <ToggleField
-            label="Grietas"
-            description="Discontinuidad abierta (>2.0 mm, prof. >10 mm) que afecta estabilidad."
-            value={form.grietas}
-            onChange={(v) => set("grietas", v)}
-          />
+          <ToggleField label="Grietas" description="Discontinuidad abierta (>2.0 mm, prof. >10 mm) que afecta estabilidad."
+            value={form.grietas} onChange={(v) => set("grietas", v)} />
           {form.grietas && (
-            <TextInput
-              style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
-              placeholder="Descripción de ubicación y alcance..."
-              placeholderTextColor={C.textSecondary}
-              value={form.grietasDesc}
-              onChangeText={(v) => set("grietasDesc", v)}
-              multiline numberOfLines={2}
-            />
+            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+              placeholder="Descripción de ubicación y alcance..." placeholderTextColor={C.textSecondary}
+              value={form.grietasDesc} onChangeText={(v) => set("grietasDesc", v)} multiline numberOfLines={2} />
           )}
         </Section>
 
-        {/* 8. VERTICALIDAD (condicional) */}
+        {/* 8. VERTICALIDAD */}
         {showVerticalidad && (
           <Section icon="bar-chart-2" title="Verticalidad (≥4 niveles)">
             <InfoBox text="Verificar por topografía la verticalidad a lo largo de un vértice de la edificación." />
-            <ToggleField
-              label="¿Se evidencia variación de verticalidad?"
-              value={form.verticalidad}
-              onChange={(v) => set("verticalidad", v)}
-            />
+            <ToggleField label="¿Se evidencia variación de verticalidad?" value={form.verticalidad} onChange={(v) => set("verticalidad", v)} />
             <Field label="Notas y observaciones topográficas">
-              <TextInput
-                style={[styles.input, styles.inputMultilineSmall]}
+              <TextInput style={[styles.input, styles.inputMultilineSmall]}
                 placeholder="Descripción del resultado del levantamiento topográfico..."
-                placeholderTextColor={C.textSecondary}
-                value={form.verticalidadNotas}
-                onChangeText={(v) => set("verticalidadNotas", v)}
-                multiline numberOfLines={2}
-              />
+                placeholderTextColor={C.textSecondary} value={form.verticalidadNotas}
+                onChangeText={(v) => set("verticalidadNotas", v)} multiline numberOfLines={2} />
             </Field>
           </Section>
         )}
 
         {/* 9. DOCUMENTACIÓN ADICIONAL */}
         <Section icon="file-text" title="Documentación Adicional">
-          <ToggleField
-            label="Plano de ubicación topográfica radicado"
+          <ToggleField label="Plano de ubicación topográfica radicado"
             description="Incluye predios, vías y demás zonas involucradas en la actividad."
-            value={form.planTopografico}
-            onChange={(v) => set("planTopografico", v)}
-          />
+            value={form.planTopografico} onChange={(v) => set("planTopografico", v)} />
           <View style={styles.divider} />
           <Field label="Observaciones del profesional">
-            <TextInput
-              style={[styles.input, styles.inputMultiline]}
-              placeholder="Cualquier observación adicional..."
-              placeholderTextColor={C.textSecondary}
-              value={form.observacionesProfesional}
-              onChangeText={(v) => set("observacionesProfesional", v)}
-              multiline numberOfLines={4}
-            />
+            <TextInput style={[styles.input, styles.inputMultiline]}
+              placeholder="Cualquier observación adicional..." placeholderTextColor={C.textSecondary}
+              value={form.observacionesProfesional} onChangeText={(v) => set("observacionesProfesional", v)}
+              multiline numberOfLines={4} />
           </Field>
         </Section>
 
-        {/* ══════════════════════════════════════════════
-            10. SECCIÓN FACHADA — Georef + Acabados + Fotos
-            ══════════════════════════════════════════════ */}
+        {/* 10. FACHADA */}
         <Section icon="map" title="Inspección de Fachada y Ubicación">
           <InfoBox text="Registra la ubicación del predio, el estado exterior, y adjunta las fotografías de fachada." />
-
-          {/* Georeferenciación */}
           <View style={styles.fachadaSubHeader}>
-            <View style={styles.fachadaSubIconBg}>
-              <Feather name="map-pin" size={12} color={C.primary} />
-            </View>
+            <View style={styles.fachadaSubIconBg}><Feather name="map-pin" size={12} color={C.primary} /></View>
             <Text style={styles.fachadaSubTitle}>Georeferenciación</Text>
           </View>
-          <MapPicker
-            latitud={form.latitud}
-            longitud={form.longitud}
-            onLocationChange={(lat, lng) => {
-              setField("latitud", lat);
-              setField("longitud", lng);
-            }}
-          />
-
+          <MapPicker latitud={form.latitud} longitud={form.longitud}
+            onLocationChange={(lat, lng) => { setField("latitud", lat); setField("longitud", lng); }} />
           <View style={styles.fachadaDivider} />
-
-          {/* Acabados y Fachada */}
           <View style={styles.fachadaSubHeader}>
-            <View style={styles.fachadaSubIconBg}>
-              <Feather name="grid" size={12} color={C.primary} />
-            </View>
+            <View style={styles.fachadaSubIconBg}><Feather name="grid" size={12} color={C.primary} /></View>
             <Text style={styles.fachadaSubTitle}>Acabados y Estado de Fachada</Text>
           </View>
           <Field label="Tipo de acabados en pisos y su estado">
-            <TextInput
-              style={[styles.input, styles.inputMultilineSmall]}
-              placeholder="Ej. Cerámica — buen estado, sin grietas visibles"
-              placeholderTextColor={C.textSecondary}
-              value={form.acabadosPisos}
-              onChangeText={(v) => set("acabadosPisos", v)}
-              multiline numberOfLines={2}
-            />
+            <TextInput style={[styles.input, styles.inputMultilineSmall]}
+              placeholder="Ej. Cerámica — buen estado, sin grietas visibles" placeholderTextColor={C.textSecondary}
+              value={form.acabadosPisos} onChangeText={(v) => set("acabadosPisos", v)} multiline numberOfLines={2} />
           </Field>
           <Field label="Estado de la fachada">
-            <TextInput
-              style={[styles.input, styles.inputMultilineSmall]}
-              placeholder="Ej. Pintura — buen estado, con mantenimiento reciente"
-              placeholderTextColor={C.textSecondary}
-              value={form.estadoFachada}
-              onChangeText={(v) => set("estadoFachada", v)}
-              multiline numberOfLines={2}
-            />
+            <TextInput style={[styles.input, styles.inputMultilineSmall]}
+              placeholder="Ej. Pintura — buen estado, con mantenimiento reciente" placeholderTextColor={C.textSecondary}
+              value={form.estadoFachada} onChangeText={(v) => set("estadoFachada", v)} multiline numberOfLines={2} />
           </Field>
-
           <View style={styles.fachadaDivider} />
-
-          {/* Fotografías de Fachada */}
           <View style={styles.fachadaSubHeader}>
-            <View style={styles.fachadaSubIconBg}>
-              <Feather name="image" size={12} color={C.primary} />
-            </View>
+            <View style={styles.fachadaSubIconBg}><Feather name="image" size={12} color={C.primary} /></View>
             <Text style={styles.fachadaSubTitle}>Fotografías de Fachada</Text>
           </View>
           <Text style={styles.fachadaSubDesc}>
             Fotos del exterior del predio. Se guardarán como fachada_001.jpg, fachada_002.jpg, etc.
           </Text>
-           
-          <PhotoPickerSection
-            photos={form.fotosFachada}
-            onPhotosChange={(fotos) => set("fotosFachada", fotos)}
-              />
+          <PhotoPickerSection photos={form.fotosFachada} onPhotosChange={(fotos) => set("fotosFachada", fotos)} />
         </Section>
 
         {/* 11. FOTOGRAFÍAS GENERALES */}
         <Section icon="camera" title="Fotografías Generales">
           <InfoBox text="Fotos del interior, estructura, y demás elementos del predio." />
-         <PhotoPickerSection
-            photos={form.fotos}
-            onPhotosChange={(fotos) => set("fotos", fotos)}
-            showDescription={true}
-          maxPhotos={15}
-              />
+          <PhotoPickerSection photos={form.fotos} onPhotosChange={(fotos) => set("fotos", fotos)}
+            showDescription={true} maxPhotos={15} />
         </Section>
 
         {/* 12. VIDEOS */}
         <Section icon="video" title="Videos">
-          <VideoPickerSection
-            videos={form.videos}
-            onVideosChange={(videos) => set("videos", videos)}
-          />
+          <VideoPickerSection videos={form.videos} onVideosChange={(videos) => set("videos", videos)} />
         </Section>
 
-        {/* 13. FIRMA — DUEÑO DEL PREDIO (colapsable) */}
-        <FirmaSection
-          icon="home"
-          title="Firma del Dueño del Predio"
-          signed={!!form.firmaPropietarioPredio.firma}
-        >
+        {/* 13. FIRMA — DUEÑO DEL PREDIO */}
+        <FirmaSection icon="home" title="Firma del Dueño del Predio" signed={!!form.firmaPropietarioPredio.firma}>
           <InfoBox text="Datos de contacto y firma manuscrita del propietario o residente del predio." />
           <View style={styles.row}>
             <View style={styles.rowHalf}>
               <Field label="Nombre completo">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Nombre y apellidos"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.firmaPropietarioPredio.nombre}
-                  onChangeText={(v) => setFirmaProp("nombre", v)}
-                />
+                <TextInput style={styles.input} placeholder="Nombre y apellidos" placeholderTextColor={C.textSecondary}
+                  value={form.firmaPropietarioPredio.nombre} onChangeText={(v) => setFirmaProp("nombre", v)} />
               </Field>
             </View>
             <View style={styles.rowHalf}>
               <Field label="Celular">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 3001234567"
-                  placeholderTextColor={C.textSecondary}
+                <TextInput style={styles.input} placeholder="Ej. 3001234567" placeholderTextColor={C.textSecondary}
                   value={form.firmaPropietarioPredio.celular}
                   onChangeText={(v) => setFirmaProp("celular", v.replace(/\D/g, ""))}
-                  keyboardType="phone-pad"
-                  maxLength={15}
-                />
+                  keyboardType="phone-pad" maxLength={15} />
               </Field>
             </View>
           </View>
           <Field label="Correo electrónico">
-            <TextInput
-              style={styles.input}
-              placeholder="propietario@correo.com"
-              placeholderTextColor={C.textSecondary}
-              value={form.firmaPropietarioPredio.correo}
-              onChangeText={(v) => setFirmaProp("correo", v.trim())}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+            <TextInput style={styles.input} placeholder="propietario@correo.com" placeholderTextColor={C.textSecondary}
+              value={form.firmaPropietarioPredio.correo} onChangeText={(v) => setFirmaProp("correo", v.trim())}
+              keyboardType="email-address" autoCapitalize="none" />
           </Field>
           <View style={styles.emailHint}>
             <Feather name="mail" size={13} color={C.primary} />
-            <Text style={styles.emailHintText}>
-              Se enviará un enlace a este correo para que el propietario complete y firme el acta.
-            </Text>
+            <Text style={styles.emailHintText}>Se enviará un enlace a este correo para que el propietario complete y firme el acta.</Text>
           </View>
           <Field label="Firma">
-            <SignaturePad
-              onSignatureChange={(sig) => setFirmaProp("firma", sig)}
-            />
+            <SignaturePad onSignatureChange={(sig) => setFirmaProp("firma", sig)} />
           </Field>
           {form.firmaPropietarioPredio.firma && (
             <View style={styles.sigConfirm}>
@@ -1215,46 +957,27 @@ const handleSubmit = async () => {
           )}
         </FirmaSection>
 
-        {/* 14. FIRMA — CONCESIONARIO (colapsable) */}
-        <FirmaSection
-          icon="award"
-          title="Representante Delegado Sencia S.A.S."
-          signed={!!form.firmaConcesionario.firma}
-        >
+        {/* 14. FIRMA — CONCESIONARIO */}
+        <FirmaSection icon="award" title="Representante Delegado Sencia S.A.S." signed={!!form.firmaConcesionario.firma}>
           <InfoBox text="Datos y firma del representante delegado del concesionario." />
           <View style={styles.row}>
             <View style={styles.rowHalf}>
               <Field label="Nombre completo">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Nombre y apellidos"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.firmaConcesionario.nombre}
-                  onChangeText={(v) => setFirma("firmaConcesionario", "nombre", v)}
-                />
+                <TextInput style={styles.input} placeholder="Nombre y apellidos" placeholderTextColor={C.textSecondary}
+                  value={form.firmaConcesionario.nombre} onChangeText={(v) => setFirma("firmaConcesionario", "nombre", v)} />
               </Field>
             </View>
             <View style={styles.rowHalf}>
               <Field label="Cédula">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 12345678"
-                  placeholderTextColor={C.textSecondary}
+                <TextInput style={styles.input} placeholder="Ej. 12345678" placeholderTextColor={C.textSecondary}
                   value={form.firmaConcesionario.cedula}
-                  onChangeText={(v) => setFirma("firmaConcesionario", "cedula", v.replace(/\D/g, ""))}
-                  keyboardType="numeric"
-                />
+                  onChangeText={(v) => setFirma("firmaConcesionario", "cedula", v.replace(/\D/g, ""))} keyboardType="numeric" />
               </Field>
             </View>
           </View>
           <Field label="Cargo">
-            <TextInput
-              style={styles.input}
-              placeholder="Ej. Ingeniero Residente"
-              placeholderTextColor={C.textSecondary}
-              value={form.firmaConcesionario.cargo}
-              onChangeText={(v) => setFirma("firmaConcesionario", "cargo", v)}
-            />
+            <TextInput style={styles.input} placeholder="Ej. Ingeniero Residente" placeholderTextColor={C.textSecondary}
+              value={form.firmaConcesionario.cargo} onChangeText={(v) => setFirma("firmaConcesionario", "cargo", v)} />
           </Field>
           <Field label="Firma">
             <SignaturePad onSignatureChange={(sig) => setFirma("firmaConcesionario", "firma", sig)} />
@@ -1267,46 +990,27 @@ const handleSubmit = async () => {
           )}
         </FirmaSection>
 
-        {/* 15. FIRMA — PROFESIONAL TÉCNICO (colapsable) */}
-        <FirmaSection
-          icon="tool"
-          title="Profesional Técnico"
-          signed={!!form.firmaProfesional.firma}
-        >
+        {/* 15. FIRMA — PROFESIONAL TÉCNICO */}
+        <FirmaSection icon="tool" title="Profesional Técnico" signed={!!form.firmaProfesional.firma}>
           <InfoBox text="Datos y firma del profesional técnico que diligencia el acta." />
           <View style={styles.row}>
             <View style={styles.rowHalf}>
               <Field label="Nombre completo">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Nombre y apellidos"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.firmaProfesional.nombre}
-                  onChangeText={(v) => setFirma("firmaProfesional", "nombre", v)}
-                />
+                <TextInput style={styles.input} placeholder="Nombre y apellidos" placeholderTextColor={C.textSecondary}
+                  value={form.firmaProfesional.nombre} onChangeText={(v) => setFirma("firmaProfesional", "nombre", v)} />
               </Field>
             </View>
             <View style={styles.rowHalf}>
               <Field label="Cédula">
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 12345678"
-                  placeholderTextColor={C.textSecondary}
+                <TextInput style={styles.input} placeholder="Ej. 12345678" placeholderTextColor={C.textSecondary}
                   value={form.firmaProfesional.cedula}
-                  onChangeText={(v) => setFirma("firmaProfesional", "cedula", v.replace(/\D/g, ""))}
-                  keyboardType="numeric"
-                />
+                  onChangeText={(v) => setFirma("firmaProfesional", "cedula", v.replace(/\D/g, ""))} keyboardType="numeric" />
               </Field>
             </View>
           </View>
           <Field label="Cargo">
-            <TextInput
-              style={styles.input}
-              placeholder="Ej. Ingeniero Civil"
-              placeholderTextColor={C.textSecondary}
-              value={form.firmaProfesional.cargo}
-              onChangeText={(v) => setFirma("firmaProfesional", "cargo", v)}
-            />
+            <TextInput style={styles.input} placeholder="Ej. Ingeniero Civil" placeholderTextColor={C.textSecondary}
+              value={form.firmaProfesional.cargo} onChangeText={(v) => setFirma("firmaProfesional", "cargo", v)} />
           </Field>
           <Field label="Firma">
             <SignaturePad onSignatureChange={(sig) => setFirma("firmaProfesional", "firma", sig)} />
@@ -1323,11 +1027,11 @@ const handleSubmit = async () => {
         <View style={styles.summary}>
           <Text style={styles.summaryTitle}>Resumen del Registro</Text>
           <SummaryItem icon="file-text"   label="Tipo acta"       value={form.tipoActa ? form.tipoActa.charAt(0).toUpperCase() + form.tipoActa.slice(1) : "—"} filled={!!form.tipoActa} />
-          <SummaryItem icon="user"        label="Nombre"          value={(form.nombre      ?? "").trim() || "—"}  filled={!!(form.nombre      ?? "").trim()} />
-          <SummaryItem icon="credit-card" label="Cédula"          value={(form.cedula      ?? "").trim() || "—"}  filled={!!(form.cedula      ?? "").trim()} />
-          <SummaryItem icon="map-pin"     label="Dirección"       value={direccionFinal()         || "—"} filled={!!direccionFinal()} />
-          <SummaryItem icon="briefcase"   label="Inter. nombre"   value={(form.interNombre ?? "").trim() || "—"}  filled={!!(form.interNombre ?? "").trim()} />
-          <SummaryItem icon="mail"        label="Inter. correo"   value={(form.interCorreo ?? "").trim() || "—"}  filled={!!(form.interCorreo ?? "").trim()} />
+          <SummaryItem icon="user"        label="Nombre"          value={(form.nombre ?? "").trim() || "—"}  filled={!!(form.nombre ?? "").trim()} />
+          <SummaryItem icon="credit-card" label="Cédula"          value={(form.cedula ?? "").trim() || "—"}  filled={!!(form.cedula ?? "").trim()} />
+          <SummaryItem icon="map-pin"     label="Dirección"       value={direccionFinal() || "—"}             filled={!!direccionFinal()} />
+          <SummaryItem icon="briefcase"   label="Inter. nombre"   value={(form.interNombre ?? "").trim() || "—"} filled={!!(form.interNombre ?? "").trim()} />
+          <SummaryItem icon="mail"        label="Inter. correo"   value={(form.interCorreo ?? "").trim() || "—"} filled={!!(form.interCorreo ?? "").trim()} />
           <SummaryItem icon="home"        label="Pisos"           value={form.numeroPisos ? `${form.numeroPisos} pisos — estrato ${form.estrato || "?"}` : "—"} filled={!!form.numeroPisos} />
           <SummaryItem icon="map-pin"     label="Ubicación"       value={form.latitud !== null ? "Capturada" : "Sin capturar"} filled={form.latitud !== null} />
           <SummaryItem icon="camera"      label="Fotos generales" value={`${form.fotos.length} adjuntas`}        filled={form.fotos.length > 0} />
@@ -1335,12 +1039,10 @@ const handleSubmit = async () => {
           <SummaryItem icon="video"       label="Videos"          value={`${form.videos.length} adjuntos`}       filled={form.videos.length > 0} />
           <SummaryItem icon="home"        label="Firma propiet."  value={form.firmaPropietarioPredio.firma ? "Capturada" : "Sin capturar"} filled={!!form.firmaPropietarioPredio.firma} />
           <SummaryItem icon="award"       label="Conc. firma"     value={form.firmaConcesionario.firma ? "Capturada" : "Sin capturar"} filled={!!form.firmaConcesionario.firma} />
-          <SummaryItem icon="tool"        label="Prof. firma"     value={form.firmaProfesional.firma   ? "Capturada" : "Sin capturar"} filled={!!form.firmaProfesional.firma} />
+          <SummaryItem icon="tool"        label="Prof. firma"     value={form.firmaProfesional.firma ? "Capturada" : "Sin capturar"} filled={!!form.firmaProfesional.firma} />
           <View style={styles.uploadNote}>
             <Feather name="upload-cloud" size={12} color={C.textSecondary} />
-            <Text style={styles.uploadNoteText}>
-              Los archivos se depositarán en el servidor FTP en /uploads/[ID del registro]
-            </Text>
+            <Text style={styles.uploadNoteText}>Los archivos se depositarán en el servidor FTP en /uploads/[ID del registro]</Text>
           </View>
         </View>
 
@@ -1360,11 +1062,7 @@ const handleSubmit = async () => {
 
         {/* ENVIAR */}
         <Pressable
-          style={({ pressed }) => [
-            styles.submitBtn,
-            pressed && styles.submitBtnPressed,
-            isSubmitting && styles.submitBtnDisabled,
-          ]}
+          style={({ pressed }) => [styles.submitBtn, pressed && styles.submitBtnPressed, isSubmitting && styles.submitBtnDisabled]}
           onPress={handleSubmit}
           disabled={isSubmitting}
         >
@@ -1373,28 +1071,23 @@ const handleSubmit = async () => {
           ) : (
             <>
               <Feather name={isEditing ? "edit-2" : "upload-cloud"} size={18} color="#fff" />
-              <Text style={styles.submitText}>
-                {isEditing ? "Guardar Cambios" : "Enviar Registro"}
-              </Text>
+              <Text style={styles.submitText}>{isEditing ? "Guardar Cambios" : "Enviar Registro"}</Text>
             </>
           )}
         </Pressable>
 
       </ScrollView>
 
-      {/* OVERLAY */}
+      {/* ── OVERLAY ── */}
       {sidebarOpen && (
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeSidebar} />
       )}
 
-      {/* SIDEBAR */}
+      {/* ── SIDEBAR ── */}
       <Animated.View
-        style={[
-          styles.sidebar,
-          { paddingTop: topPadding + 8 },
-          { transform: [{ translateX: sidebarAnim }] },
-        ]}
+        style={[styles.sidebar, { paddingTop: topPadding + 8 }, { transform: [{ translateX: sidebarAnim }] }]}
       >
+        {/* Cabecera */}
         <View style={styles.sidebarHeader}>
           <View style={styles.sidebarLogoRow}>
             <View style={styles.sidebarLogoBadge}>
@@ -1411,10 +1104,18 @@ const handleSubmit = async () => {
         </View>
 
         <View style={styles.sidebarDivider} />
+
+        {/* Cola de subida */}
+        <QueueStatusBar onPress={() => navigateTo('/queue')} />
+
         <View style={styles.sidebarDivider} />
-<QueueStatusBar onPress={() => navigateTo('/queue')} />
-<View style={styles.sidebarDivider} />
-       
+
+        {/* ★ Actas Movistar — AQUÍ, dentro del sidebar ★ */}
+        <ActasMovistar onActaSeleccionada={cargarActaMovistar} />
+
+        <View style={styles.sidebarDivider} />
+
+        {/* Nuevo registro (activo) */}
         <View style={[styles.sidebarItem, styles.sidebarItemActive]}>
           <View style={[styles.sidebarItemIcon, styles.sidebarItemIconActive]}>
             <Feather name="plus-circle" size={16} color="#fff" />
@@ -1425,6 +1126,7 @@ const handleSubmit = async () => {
           </View>
         </View>
 
+        {/* Resto de ítems */}
         {SIDEBAR_ITEMS.map((item) => (
           <Pressable
             key={item.route}
@@ -1444,6 +1146,7 @@ const handleSubmit = async () => {
 
         <View style={styles.sidebarDivider} />
 
+        {/* Footer usuario */}
         <View style={styles.sidebarFooter}>
           <View style={styles.sidebarUserRow}>
             <View style={styles.sidebarUserAvatar}>
@@ -1466,12 +1169,11 @@ const handleSubmit = async () => {
         </View>
       </Animated.View>
 
+      {/* ── Loading overlay ── */}
       {loadingActa && (
-        <View style={{
-          position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: "rgba(255,255,255,0.85)", zIndex: 50,
-          justifyContent: "center", alignItems: "center", gap: 12,
-        }}>
+          justifyContent: "center", alignItems: "center", gap: 12 }}>
           <ActivityIndicator size="large" color={C.primary} />
           <Text style={{ fontSize: 14, fontFamily: "Inter_500Medium", color: C.textSecondary }}>
             Cargando datos del registro...
@@ -1490,9 +1192,7 @@ function Section({ icon, title, children }: { icon: any; title: string; children
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <View style={styles.sectionIconBg}>
-          <Feather name={icon} size={14} color={C.primary} />
-        </View>
+        <View style={styles.sectionIconBg}><Feather name={icon} size={14} color={C.primary} /></View>
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
       <View style={styles.sectionBody}>{children}</View>
@@ -1542,158 +1242,78 @@ function SummaryItem({ icon, label, value, filled }: { icon: any; label: string;
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-
-  topBar: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 16, paddingBottom: 18, gap: 12,
-  },
-  iconBtn: {
-    width: 38, height: 38, borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    justifyContent: "center", alignItems: "center",
-  },
+  topBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 18, gap: 12 },
+  iconBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.18)", justifyContent: "center", alignItems: "center" },
   topBarCenter: { flex: 1 },
-  topBarTitle:  { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.3 },
-  topBarSub:    { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 1 },
+  topBarTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.3 },
+  topBarSub:   { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 1 },
 
   scroll:  { flex: 1 },
   content: { padding: 16, gap: 14 },
 
-  tipoActaCard: {
-    backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 14,
-    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 8, elevation: 3,
-  },
-  tipoActaLabel: {
-    fontSize: 10, fontFamily: "Inter_700Bold",
-    color: C.textSecondary, letterSpacing: 1.2, textTransform: "uppercase",
-  },
-  tipoActaRow:           { flexDirection: "row", gap: 10 },
-  tipoActaBtn: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, paddingVertical: 13, borderRadius: 13,
-    borderWidth: 1.5, borderColor: C.border, backgroundColor: C.inputBg,
-  },
+  tipoActaCard: { backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 14,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3 },
+  tipoActaLabel: { fontSize: 10, fontFamily: "Inter_700Bold", color: C.textSecondary, letterSpacing: 1.2, textTransform: "uppercase" },
+  tipoActaRow:   { flexDirection: "row", gap: 10 },
+  tipoActaBtn:   { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 13, borderRadius: 13, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.inputBg },
   tipoActaBtnActive:     { backgroundColor: C.primary, borderColor: C.primary },
   tipoActaBtnText:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
   tipoActaBtnTextActive: { color: "#fff" },
 
-  section: {
-    backgroundColor: C.card, borderRadius: 20, overflow: "hidden",
-    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 8, elevation: 3,
-  },
-  sectionHeader: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingHorizontal: 18, paddingVertical: 15,
-    borderBottomWidth: 1, borderBottomColor: C.border,
-    backgroundColor: C.card,
-  },
-  sectionIconBg: {
-    width: 30, height: 30, borderRadius: 9,
-    backgroundColor: C.primary + "15",
-    justifyContent: "center", alignItems: "center",
-  },
-  sectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.1 },
-  sectionBody:  { padding: 18, gap: 14 },
+  section: { backgroundColor: C.card, borderRadius: 20, overflow: "hidden",
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 18, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.card },
+  sectionIconBg: { width: 30, height: 30, borderRadius: 9, backgroundColor: C.primary + "15", justifyContent: "center", alignItems: "center" },
+  sectionTitle:  { fontSize: 14, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.1 },
+  sectionBody:   { padding: 18, gap: 14 },
 
-  // Badge "Firmado"
-  sigBadge: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "#E6F4EA", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
-    marginLeft: 8,
-  },
+  sigBadge:     { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#E6F4EA", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, marginLeft: 8 },
   sigBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#2E7D32" },
 
+  // Banner de bloqueo
+  lockedBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "#F5F3FF", borderRadius: 10, padding: 10,
+    borderLeftWidth: 3, borderLeftColor: "#7C3AED" },
+  lockedBannerText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: "#6D28D9", lineHeight: 17 },
+
   fieldContainer: { gap: 7 },
-  fieldLabel: {
-    fontSize: 11, fontFamily: "Inter_600SemiBold",
-    color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.6,
-  },
-  input: {
-    backgroundColor: C.inputBg, borderRadius: 13,
-    borderWidth: 1.5, borderColor: C.border,
-    paddingHorizontal: 14, paddingVertical: 13,
-    fontSize: 15, fontFamily: "Inter_400Regular", color: C.text,
-  },
-  inputMultiline:      { minHeight: 82,  textAlignVertical: "top", paddingTop: 13 },
-  inputMultilineSmall: { minHeight: 58,  textAlignVertical: "top", paddingTop: 13 },
-  inputIndented: {
-    marginTop: 8, borderLeftWidth: 3,
-    borderLeftColor: C.primary + "55", borderRadius: 10,
-    backgroundColor: C.primary + "08",
-  },
+  fieldLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.6 },
+  input: { backgroundColor: C.inputBg, borderRadius: 13, borderWidth: 1.5, borderColor: C.border,
+    paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, fontFamily: "Inter_400Regular", color: C.text },
+  inputMultiline:      { minHeight: 82, textAlignVertical: "top", paddingTop: 13 },
+  inputMultilineSmall: { minHeight: 58, textAlignVertical: "top", paddingTop: 13 },
+  inputIndented:  { marginTop: 8, borderLeftWidth: 3, borderLeftColor: C.primary + "55", borderRadius: 10, backgroundColor: C.primary + "08" },
   inputError:     { borderColor: C.error, backgroundColor: C.error + "0A" },
-   
-  inputLocked: {
-    backgroundColor: C.inputBg,
-    borderColor:     C.border,
-    color:           C.textSecondary,
-    opacity:         0.7,
-  },
+  inputLocked:    { backgroundColor: C.inputBg, borderColor: C.border, color: C.textSecondary, opacity: 0.65 },
   fieldError:     { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
   fieldErrorText: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.error },
 
-  // Zona / Apartamento
-  zonaContainer: {
-    flexDirection: "row", alignItems: "flex-start", gap: 10,
-    backgroundColor: C.primary + "08", borderRadius: 12,
-    borderWidth: 1.5, borderColor: C.primary + "30",
-    padding: 12, marginTop: 4,
-  },
-  zonaInput: { marginBottom: 0 },
-  zonaPreview: {
-    flexDirection: "row", alignItems: "flex-start", gap: 6,
-    backgroundColor: C.primary + "12", borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 7,
-  },
-  zonaPreviewText: {
-    flex: 1, fontSize: 12, fontFamily: "Inter_400Regular",
-    color: C.primary, lineHeight: 17,
-  },
+  zonaContainer: { flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: C.primary + "08", borderRadius: 12, borderWidth: 1.5, borderColor: C.primary + "30", padding: 12, marginTop: 4 },
+  zonaInput:   { marginBottom: 0 },
+  zonaPreview: { flexDirection: "row", alignItems: "flex-start", gap: 6,
+    backgroundColor: C.primary + "12", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
+  zonaPreviewText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.primary, lineHeight: 17 },
 
-  // Select dropdown
-  selectBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-  },
-  selectBtnText: {
-    fontSize: 15, fontFamily: "Inter_400Regular", color: C.text, flex: 1,
-  },
-  selectDropdown: {
-    backgroundColor: C.card, borderRadius: 12,
-    borderWidth: 1.5, borderColor: C.border,
-    overflow: "hidden", marginTop: 2,
-    shadowColor: C.shadow, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1, shadowRadius: 8, elevation: 4,
-  },
-  selectOption: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 14, paddingVertical: 13,
-    borderBottomWidth: 1, borderBottomColor: C.border,
-  },
+  selectBtn:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  selectBtnText:  { fontSize: 15, fontFamily: "Inter_400Regular", color: C.text, flex: 1 },
+  selectDropdown: { backgroundColor: C.card, borderRadius: 12, borderWidth: 1.5, borderColor: C.border,
+    overflow: "hidden", marginTop: 2, shadowColor: C.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 8, elevation: 4 },
+  selectOption:           { flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: C.border },
   selectOptionActive:     { backgroundColor: C.primary + "10" },
   selectOptionText:       { fontSize: 15, fontFamily: "Inter_400Regular", color: C.text },
   selectOptionTextActive: { fontFamily: "Inter_600SemiBold", color: C.primary },
 
-  emailHint: {
-    flexDirection: "row", alignItems: "flex-start", gap: 9,
-    backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12,
-    borderLeftWidth: 3, borderLeftColor: C.primary,
-  },
-  emailHintText: {
-    flex: 1, fontSize: 12, fontFamily: "Inter_400Regular",
-    color: C.textSecondary, lineHeight: 18,
-  },
+  emailHint: { flexDirection: "row", alignItems: "flex-start", gap: 9,
+    backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12, borderLeftWidth: 3, borderLeftColor: C.primary },
+  emailHintText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
 
-  infoBox: {
-    flexDirection: "row", alignItems: "flex-start", gap: 9,
-    backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12,
-    borderLeftWidth: 3, borderLeftColor: C.primary,
-  },
-  infoText: {
-    flex: 1, fontSize: 12, fontFamily: "Inter_400Regular",
-    color: C.textSecondary, lineHeight: 18,
-  },
+  infoBox:  { flexDirection: "row", alignItems: "flex-start", gap: 9,
+    backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12, borderLeftWidth: 3, borderLeftColor: C.primary },
+  infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
 
   row:     { flexDirection: "row", gap: 12 },
   rowHalf: { flex: 1 },
@@ -1701,83 +1321,47 @@ const styles = StyleSheet.create({
 
   servicesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   serviceItem:  { width: "47%" },
-  serviceLabel: {
-    fontSize: 11, fontFamily: "Inter_600SemiBold",
-    color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.5,
-  },
+  serviceLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
   serviceInput: { paddingVertical: 11, fontSize: 14 },
 
-  usoRow:           { flexDirection: "row", alignItems: "center", gap: 12 },
-  usoLabel:         { width: 130, fontSize: 13, fontFamily: "Inter_500Medium", color: C.text },
-  usoInputContainer:{ flex: 1 },
-  usoInput:         { paddingVertical: 10, fontSize: 14 },
+  usoRow:            { flexDirection: "row", alignItems: "center", gap: 12 },
+  usoLabel:          { width: 130, fontSize: 13, fontFamily: "Inter_500Medium", color: C.text },
+  usoInputContainer: { flex: 1 },
 
-  // Fachada sub-sección (dentro de la sección unificada)
-  fachadaDivider: {
-    height: 1, backgroundColor: C.border, marginVertical: 6,
-  },
-  fachadaSubHeader: {
-    flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4,
-  },
-  fachadaSubIconBg: {
-    width: 26, height: 26, borderRadius: 8,
-    backgroundColor: C.primary + "18",
-    justifyContent: "center", alignItems: "center",
-  },
-  fachadaSubTitle: {
-    fontSize: 13, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.1,
-  },
-  fachadaSubDesc: {
-    fontSize: 12, fontFamily: "Inter_400Regular",
-    color: C.textSecondary, lineHeight: 17, marginBottom: 8,
-    marginLeft: 34,
-  },
+  fachadaDivider:  { height: 1, backgroundColor: C.border, marginVertical: 6 },
+  fachadaSubHeader:{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  fachadaSubIconBg:{ width: 26, height: 26, borderRadius: 8, backgroundColor: C.primary + "18", justifyContent: "center", alignItems: "center" },
+  fachadaSubTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.1 },
+  fachadaSubDesc:  { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 17, marginBottom: 8, marginLeft: 34 },
 
   sigConfirm:     { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
   sigConfirmText: { fontSize: 12, fontFamily: "Inter_500Medium", color: C.accent },
 
-  summary: {
-    backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 10,
-    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 8, elevation: 3,
-  },
-  summaryTitle: {
-    fontSize: 13, fontFamily: "Inter_700Bold",
-    color: C.text, marginBottom: 6, letterSpacing: -0.1,
-  },
-  summaryItem:            { flexDirection: "row", alignItems: "center", gap: 10 },
-  summaryIconWrap:        { width: 24, height: 24, borderRadius: 7, backgroundColor: C.border, justifyContent: "center", alignItems: "center" },
-  summaryIconWrapFilled:  { backgroundColor: C.accent + "18" },
-  summaryLabel:           { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textSecondary, width: 100 },
-  summaryValue:           { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary },
-  summaryValueFilled:     { color: C.text, fontFamily: "Inter_500Medium" },
-  uploadNote: {
-    flexDirection: "row", alignItems: "flex-start", gap: 7,
-    backgroundColor: C.inputBg, borderRadius: 10, padding: 10, marginTop: 4,
-    borderWidth: 1, borderColor: C.border,
-  },
-  uploadNoteText: {
-    flex: 1, fontSize: 11, fontFamily: "Inter_400Regular",
-    color: C.textSecondary, lineHeight: 16,
-  },
+  summary: { backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 10,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3 },
+  summaryTitle:          { fontSize: 13, fontFamily: "Inter_700Bold", color: C.text, marginBottom: 6, letterSpacing: -0.1 },
+  summaryItem:           { flexDirection: "row", alignItems: "center", gap: 10 },
+  summaryIconWrap:       { width: 24, height: 24, borderRadius: 7, backgroundColor: C.border, justifyContent: "center", alignItems: "center" },
+  summaryIconWrapFilled: { backgroundColor: C.accent + "18" },
+  summaryLabel:          { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textSecondary, width: 100 },
+  summaryValue:          { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  summaryValueFilled:    { color: C.text, fontFamily: "Inter_500Medium" },
+  uploadNote: { flexDirection: "row", alignItems: "flex-start", gap: 7,
+    backgroundColor: C.inputBg, borderRadius: 10, padding: 10, marginTop: 4, borderWidth: 1, borderColor: C.border },
+  uploadNoteText: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 16 },
 
-  submitBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+  submitBtn:         { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
     backgroundColor: C.accent, borderRadius: 16, paddingVertical: 19, marginTop: 4,
-    shadowColor: C.accent, shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
-  },
+    shadowColor: C.accent, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8 },
   submitBtnPressed:  { opacity: 0.85, transform: [{ scale: 0.985 }] },
   submitBtnDisabled: { opacity: 0.6 },
   submitText:        { fontSize: 17, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.2 },
 
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.38)", zIndex: 10 },
-  sidebar: {
-    position: "absolute", top: 0, left: 0, bottom: 0,
-    width: SIDEBAR_WIDTH, backgroundColor: C.card, zIndex: 20,
-    shadowColor: "#000", shadowOffset: { width: 5, height: 0 },
-    shadowOpacity: 0.12, shadowRadius: 20, elevation: 24,
-  },
+  sidebar: { position: "absolute", top: 0, left: 0, bottom: 0, width: SIDEBAR_WIDTH,
+    backgroundColor: C.card, zIndex: 20,
+    shadowColor: "#000", shadowOffset: { width: 5, height: 0 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 24 },
+
   sidebarHeader:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingBottom: 16 },
   sidebarLogoRow:    { flexDirection: "row", alignItems: "center", gap: 10 },
   sidebarLogoBadge:  { width: 38, height: 38, borderRadius: 11, backgroundColor: C.primary, justifyContent: "center", alignItems: "center" },
@@ -1797,17 +1381,15 @@ const styles = StyleSheet.create({
   sidebarItemDesc:        { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 1 },
 
   sidebarFooter:         { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16 },
-  sidebarUserRow:        { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.inputBg, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
+  sidebarUserRow:        { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.inputBg,
+    borderRadius: 14, padding: 12, borderWidth: 1, borderColor: C.border },
   sidebarUserAvatar:     { width: 34, height: 34, borderRadius: 17, backgroundColor: C.primary, justifyContent: "center", alignItems: "center" },
   sidebarUserAvatarText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff" },
   sidebarUserName:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.text },
   sidebarUserRole:       { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
   sidebarLogoutBtn:      { width: 32, height: 32, borderRadius: 9, backgroundColor: C.error + "15", justifyContent: "center", alignItems: "center" },
 
-  errorSummary: {
-    backgroundColor: "#FFF5F5", borderRadius: 14, padding: 16,
-    borderWidth: 1.5, borderColor: "#FEB2B2", gap: 8,
-  },
+  errorSummary:       { backgroundColor: "#FFF5F5", borderRadius: 14, padding: 16, borderWidth: 1.5, borderColor: "#FEB2B2", gap: 8 },
   errorSummaryHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   errorSummaryTitle:  { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#E53E3E" },
   errorSummaryItem:   { fontSize: 13, fontFamily: "Inter_400Regular", color: "#C53030", paddingLeft: 4 },
