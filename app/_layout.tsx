@@ -14,7 +14,8 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider } from "@/contexts/AuthContext";
-
+import { iniciarWorker } from '@/services/queueWorker';
+ 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
@@ -26,6 +27,8 @@ function RootLayoutNav() {
       <Stack.Screen name="search" />
       <Stack.Screen name="createUser" />
       <Stack.Screen name="success" />
+      <Stack.Screen name="queue" />
+
     </Stack>
   );
 }
@@ -37,7 +40,9 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
-
+useEffect(() => {
+  iniciarWorker();
+}, []);
   useEffect(() => {
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();

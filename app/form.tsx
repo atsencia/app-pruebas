@@ -27,6 +27,8 @@ import ToggleField from "@/components/ToggleField";
 import Colors from "@/constants/colors";
 import { useLocalSearchParams } from "expo-router";
 import { useFormStore } from '../store/zustand-state';
+import { useUploadQueue } from '@/hooks/useUploadQueue';
+import QueueStatusBar from '@/components/QueueStatusBar';
 
 
 
@@ -175,6 +177,7 @@ const USOS_ACTUALES = [
 ] as const;
 
 const SIDEBAR_ITEMS: { icon: any; label: string; route: string; description: string }[] = [
+ { icon: "upload-cloud", label: "Cola de subida", route: "/queue", description: "Ver estado de los envíos" }, 
   { icon: "search",   label: "Buscar registros",   route: "/search",         description: "Consultar actas existentes" },
   { icon: "users",    label: "Crear usuario",       route: "/createUser",     description: "Solo administradores"       },
   { icon: "settings", label: "Gestionar usuarios",  route: "/userManagement", description: "Solo administradores"       },
@@ -288,6 +291,7 @@ function FirmaSection({ icon, title, signed, children }: FirmaSectionProps) {
 // ─────────────────────────────────────────────
 
 export default function FormScreen() {
+const { agregarALaCola } = useUploadQueue();
 
   const form      = useFormStore((state) => state.formData);
   const setField  = useFormStore((state) => state.setField);
@@ -510,50 +514,52 @@ const direccionFinal = (): string => {
   });
 
   // ── Submit ──────────────────────────────────
-  const handleSubmit = async () => {
-    if (!validate()) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const resultado = await subirFormularioFTP(
-        {
-          nombre:   (form.nombre ?? "").trim(),
-          apellido:  (form.cedula ?? "").trim(),
-          direccion: direccionFinal(),
-          georef:    { latitud: form.latitud, longitud: form.longitud },
-          fotos:        form.fotos,
-          fotosFachada: form.fotosFachada,
-          videos:       form.videos.map((v: any) => ({ uri: v.uri })),
-          extra:        buildDatos(),
-          registro_uuid: isEditing ? registro_uuid : undefined,
-          revisado_por: user?.username ?? null,
-        },
-        (porcentaje: any, mensaje: any) => console.log(`[FTP] ${porcentaje}% — ${mensaje}`)
-      );
-      if (!resultado.success) throw new Error(resultado.mensaje);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.push({
-        pathname: "/success",
-        params: {
-          numeroRegistro:     resultado.id,
-          nombre:             (form.nombre ?? "").trim(),
-          fotosCount:         String(form.fotos.length),
-          fotosFachadaCount:  String(form.fotosFachada.length),
-          videosCount:        String(form.videos.length),
-        },
-      });
+ 
+const handleSubmit = async () => {
+  if (!validate()) {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    return;
+  }
 
-      clearForm();
+  setIsSubmitting(true);
+  try {
+    const formulario = {
+      nombre:        (form.nombre ?? '').trim(),
+      apellido:      (form.cedula ?? '').trim(),
+      direccion:     direccionFinal(),
+      georef:        { latitud: form.latitud, longitud: form.longitud },
+      fotos:         form.fotos,
+      fotosFachada:  form.fotosFachada,
+      videos:        form.videos.map((v: any) => ({ uri: v.uri })),
+      extra:         buildDatos(),
+      registro_uuid: isEditing ? registro_uuid : undefined,
+      revisado_por:  user?.username ?? null,
+    };
 
-    } catch (e: any) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Error", e.message || "No se pudo enviar el registro");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    await agregarALaCola(formulario);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Navegar a success inmediatamente — la subida ocurre en background
+    router.push({
+      pathname: '/success',
+      params: {
+        numeroRegistro:    formulario.registro_uuid ?? 'En cola',
+        nombre:            (form.nombre ?? '').trim(),
+        fotosCount:        String(form.fotos.length),
+        fotosFachadaCount: String(form.fotosFachada.length),
+        videosCount:       String(form.videos.length),
+        enCola:            'true',  // para que success muestre mensaje distinto
+      },
+    });
+
+    clearForm();
+  } catch (e: any) {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Alert.alert('Error', e.message || 'No se pudo encolar el registro');
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleLogout = async () => { await logout(); router.replace("/login"); };
 
@@ -1374,7 +1380,10 @@ const direccionFinal = (): string => {
         </View>
 
         <View style={styles.sidebarDivider} />
-
+        <View style={styles.sidebarDivider} />
+<QueueStatusBar onPress={() => navigateTo('/queue')} />
+<View style={styles.sidebarDivider} />
+       
         <View style={[styles.sidebarItem, styles.sidebarItemActive]}>
           <View style={[styles.sidebarItemIcon, styles.sidebarItemIconActive]}>
             <Feather name="plus-circle" size={16} color="#fff" />
