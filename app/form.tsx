@@ -29,6 +29,8 @@ import { useLocalSearchParams } from "expo-router";
 import { useFormStore } from '../store/zustand-state';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
 import QueueStatusBar from '@/components/QueueStatusBar';
+import ActasMovistar from '@/components/ActasMovistar';
+
 
 
 
@@ -397,6 +399,19 @@ const { agregarALaCola } = useUploadQueue();
     setTimeout(() => router.push(route as any), 240);
   };
 
+  const cargarActaMovistar = (uuid: string) => {
+  // 1. Cerrar sidebar
+  closeSidebar();
+  // 2. Navegar al mismo form con el registro_uuid
+  //    Esto dispara el useEffect de cargarActa que ya tienes
+  setTimeout(() => {
+    router.push({
+      pathname: '/form',
+      params:   { registro_uuid: uuid },
+    } as any);
+  }, 240);
+};
+
   // ── Estado del formulario ──────────────────
 
   const [errors,       setErrors]      = useState<FieldErrors>({});
@@ -579,6 +594,7 @@ const handleSubmit = async () => {
           <Feather name="menu" size={20} color="#fff" />
         </Pressable>
         <View style={styles.topBarCenter}>
+          
           <Text style={styles.topBarTitle}>
             {isEditing ? "Editar Registro" : "Nuevo Registro"}
           </Text>
@@ -627,38 +643,53 @@ const handleSubmit = async () => {
         </View>
 
         {/* 1. DATOS DEL VECINO / PROPIETARIO */}
-        <Section icon="user" title="Datos del Vecino / Propietario">
+        <Section icon="user" title="Datos del Propietario">
           <Field label="Nombre completo" error={errors.nombre}>
             <TextInput
-              style={[styles.input, errors.nombre && styles.inputError]}
-              placeholder="Ej. Juan García López"
-              placeholderTextColor={C.textSecondary}
-              value={form.nombre}
-              onChangeText={(v) => { set("nombre", v); if (errors.nombre) setErrors((e) => ({ ...e, nombre: undefined })); }}
-            />
+                        style={[styles.input, errors.nombre && styles.inputError, isEditing && styles.inputLocked]}
+                        placeholder="Ej. Juan García López"
+                        placeholderTextColor={C.textSecondary}
+                        value={form.nombre}
+                        onChangeText={(v) => {
+                          if (isEditing) return; // bloqueado
+                          set("nombre", v);
+                          if (errors.nombre) setErrors((e) => ({ ...e, nombre: undefined }));
+                        }}
+                        editable={!isEditing}
+                      />
           </Field>
           <Field label="Cédula de identidad" error={errors.cedula}>
             <TextInput
-              style={[styles.input, errors.cedula && styles.inputError]}
+              style={[styles.input, errors.cedula && styles.inputError, isEditing && styles.inputLocked]}
               placeholder="Ej. 12345678"
               placeholderTextColor={C.textSecondary}
               value={form.cedula}
-              onChangeText={(v) => { set("cedula", v.replace(/\D/g, "")); if (errors.cedula) setErrors((e) => ({ ...e, cedula: undefined })); }}
+              onChangeText={(v) => {
+                if (isEditing) return;
+                set("cedula", v.replace(/\D/g, ""));
+                if (errors.cedula) setErrors((e) => ({ ...e, cedula: undefined }));
+              }}
               keyboardType="numeric"
               maxLength={12}
+              editable={!isEditing}
             />
           </Field>
           <View style={styles.row}>
             <View style={styles.rowHalf}>
               <Field label="Teléfono">
                 <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 3001234567"
+                  style={[styles.input, styles.inputMultiline, errors.direccion && styles.inputError, isEditing && styles.inputLocked]}
+                  placeholder="Calle, número, barrio, ciudad..."
                   placeholderTextColor={C.textSecondary}
-                  value={form.telefono}
-                  onChangeText={(v) => set("telefono", v.replace(/\D/g, ""))}
-                  keyboardType="phone-pad"
-                  maxLength={15}
+                  value={form.direccion}
+                  onChangeText={(v) => {
+                    if (isEditing) return;
+                    set("direccion", v);
+                    if (errors.direccion) setErrors((e) => ({ ...e, direccion: undefined }));
+                  }}
+                  multiline
+                  numberOfLines={3}
+                  editable={!isEditing}
                 />
               </Field>
             </View>
@@ -1593,6 +1624,13 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary + "08",
   },
   inputError:     { borderColor: C.error, backgroundColor: C.error + "0A" },
+   
+  inputLocked: {
+    backgroundColor: C.inputBg,
+    borderColor:     C.border,
+    color:           C.textSecondary,
+    opacity:         0.7,
+  },
   fieldError:     { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
   fieldErrorText: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.error },
 
