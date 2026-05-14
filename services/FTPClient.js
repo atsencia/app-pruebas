@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 const TIMEOUT_CONEXION = 15000;
 const TIMEOUT_COMANDO  = 20000;
-const TIMEOUT_TRANSFER = 120000;
+const TIMEOUT_TRANSFER = 300000; // ← 5 min (antes 2 min, insuficiente para archivos pesados)
 
 const DEBUG = true;
 const log    = (...args) => DEBUG && console.log('[FTPClient]', ...args);
@@ -61,9 +61,6 @@ export default class FTPClient {
   // OPERACIONES DE ARCHIVO
   // ──────────────────────────────────────────────────────────
 
-  /**
-   * Sube contenido de texto/buffer (ej: JSON) directamente.
-   */
   async subirArchivo(contenido, rutaRemota, esBase64 = false, onProgreso = null) {
     const buffer = esBase64
       ? Buffer.from(contenido, 'base64')
@@ -74,7 +71,6 @@ export default class FTPClient {
 
     const { host: dataHost, port: dataPort } = await this._entrarModoPasivo();
 
-    // ✅ espera150 primero en la cola, luego espera226
     const espera150 = this._waitForAnyCode(['125', '150']);
     const espera226 = this._waitForCode('226', TIMEOUT_TRANSFER);
 
@@ -88,9 +84,6 @@ export default class FTPClient {
     log(`✅ Archivo subido: ${rutaRemota}`);
   }
 
-  /**
-   * Sube un archivo desde su URI local leyendo en chunks.
-   */
   async subirArchivoDesdeURI(uriLocal, rutaRemota, onProgreso = null) {
     log(`Subiendo desde URI → ${rutaRemota}`);
 
@@ -101,7 +94,6 @@ export default class FTPClient {
 
     const { host: dataHost, port: dataPort } = await this._entrarModoPasivo();
 
-    // ✅ espera150 primero en la cola, luego espera226
     const espera150 = this._waitForAnyCode(['125', '150']);
     const espera226 = this._waitForCode('226', TIMEOUT_TRANSFER);
 
@@ -115,9 +107,6 @@ export default class FTPClient {
     log(`✅ Archivo subido desde URI: ${rutaRemota}`);
   }
 
-  /**
-   * Crea un directorio remoto (no falla si ya existe).
-   */
   async crearDirectorio(ruta) {
     try {
       await this._sendCommand(`MKD ${ruta}`, '257');
@@ -128,9 +117,6 @@ export default class FTPClient {
     }
   }
 
-  /**
-   * Lista los archivos de un directorio remoto.
-   */
   async listarDirectorio(ruta = '.') {
     const { host: dataHost, port: dataPort } = await this._entrarModoPasivo();
     this._enviarLinea(`LIST ${ruta}`);
@@ -275,10 +261,6 @@ export default class FTPClient {
   // INTERNALS: SOCKET DE DATOS
   // ──────────────────────────────────────────────────────────
 
-  /**
-   * Crea un socket de datos y devuelve { socket, conectado }.
-   * `conectado` es una Promise que resuelve cuando el socket está listo.
-   */
   _crearSocketDatos(host, port) {
     let resolverConectado;
     let rechazarConectado;
@@ -317,28 +299,53 @@ export default class FTPClient {
     return { socket, conectado };
   }
 
-  /**
-   * Envía un buffer completo por un socket ya conectado.
-   * Sin callback de write — react-native-tcp-socket no lo garantiza.
-   * El cierre se hace con un delay para asegurar que el buffer se vacíe.
-   */
+  // ──────────────────────────────────────────────────────────
+  // ✅ REFACTORIZADO: enviar buffer completo (ej: JSON pequeño)
+  //
+  // Antes: cerraba el socket con un delay heurístico (~2ms/KB)
+  //        que en redes lentas terminaba ANTES de vaciar el buffer.
+  //
+  // Ahora: socket.write() devuelve false cuando el buffer interno
+  //        está lleno. En ese caso esperamos el evento 'drain'
+  //        (buffer vaciado de verdad) antes de llamar socket.end().
+  //        Solo cuando 'finish' confirma el cierre limpio, resolvemos.
+  // ──────────────────────────────────────────────────────────
   _enviarBufferPorSocket(socket, buffer, totalBytes, onProgreso) {
     return new Promise((resolve, reject) => {
-      socket.on('error', (err) => reject(err));
+      socket.on('error', (err) => {
+        socket.destroy();
+        reject(err);
+      });
+
+      const cerrar = () => {
+        log(`Buffer enviado (${totalBytes} bytes), cerrando socket de datos...`);
+        if (typeof onProgreso === 'function') onProgreso(totalBytes, totalBytes);
+
+        // 'finish' se emite cuando el FIN TCP fue enviado y el buffer está vacío
+        socket.once('finish', () => {
+          log('Socket de datos cerrado limpiamente (finish).');
+          resolve();
+        });
+
+        socket.end();
+      };
 
       setImmediate(() => {
         log(`Escribiendo ${totalBytes} bytes en socket de datos...`);
         try {
-          socket.write(buffer); // sin callback — no es confiable en react-native-tcp-socket
-        const delayMs = Math.max(500, Math.ceil(totalBytes / 1024) * 2); // ~2ms por KB, mínimo 500ms
+          const puedeEscribirMas = socket.write(buffer);
 
-          setTimeout(() => {
-            log(`Cerrando socket de datos...`);
-            if (typeof onProgreso === 'function') onProgreso(totalBytes, totalBytes);
-            socket.end();
-            resolve();
-          }, delayMs);
-
+          if (puedeEscribirMas) {
+            // Buffer interno no está lleno — podemos cerrar de inmediato
+            cerrar();
+          } else {
+            // Buffer interno lleno — esperamos 'drain' antes de cerrar
+            log('Buffer interno lleno, esperando drain...');
+            socket.once('drain', () => {
+              log('Drain recibido, cerrando...');
+              cerrar();
+            });
+          }
         } catch (err) {
           socket.destroy();
           reject(err);
@@ -347,29 +354,48 @@ export default class FTPClient {
     });
   }
 
-  /**
-   * Lee un archivo local en chunks y los envía por un socket ya conectado.
-   * Sin callback de write — react-native-tcp-socket no lo garantiza.
-   * Entre chunks hay un yield de 50ms para no bloquear el event loop.
-   */
+  // ──────────────────────────────────────────────────────────
+  // ✅ REFACTORIZADO: enviar archivo pesado en chunks
+  //
+  // Antes: 50ms fijo entre chunks + delay heurístico al final.
+  //        En red lenta: el servidor cerraba la conexión de datos
+  //        por inactividad entre chunks, o socket.end() cortaba
+  //        antes de que el último chunk llegara al servidor.
+  //
+  // Ahora:
+  //   1. socket.write() devuelve false → esperamos 'drain' antes
+  //      del siguiente chunk (backpressure real).
+  //   2. Al terminar todos los chunks, esperamos 'drain' final
+  //      si el buffer no está vacío, y solo entonces socket.end().
+  //   3. Esperamos 'finish' para confirmar cierre limpio del TCP.
+  //   4. Sin delays arbitrarios — la velocidad la dicta la red.
+  // ──────────────────────────────────────────────────────────
   _enviarChunksPorSocket(socket, uriLocal, totalBytes, onProgreso) {
     return new Promise((resolve, reject) => {
-      socket.on('error', (err) => reject(err));
+      socket.on('error', (err) => {
+        socket.destroy();
+        reject(err);
+      });
 
       const CHUNK_BYTES = 192 * 1024;
       let bytesSent   = 0;
       let offsetBytes = 0;
 
-      const enviarChunk = async () => {
-        if (offsetBytes >= totalBytes) {
-          const delayMs = Math.max(500, Math.ceil(totalBytes / 1024) * 2);
+      const cerrar = () => {
+        log(`Todos los chunks enviados (${bytesSent} bytes), cerrando socket...`);
 
-          // Dar margen para que el buffer de red se vacíe antes de cerrar
-          setTimeout(() => {
-            log(`Todos los chunks enviados (${bytesSent} bytes), cerrando socket...`);
-            socket.end();
-            resolve();
-          }, delayMs);
+        socket.once('finish', () => {
+          log('Socket de datos cerrado limpiamente (finish).');
+          resolve();
+        });
+
+        socket.end();
+      };
+
+      const enviarChunk = async () => {
+        // ── Fin: todos los chunks fueron escritos ──
+        if (offsetBytes >= totalBytes) {
+          cerrar();
           return;
         }
 
@@ -386,14 +412,22 @@ export default class FTPClient {
           offsetBytes += chunkBuffer.length;
           log(`Chunk: ${chunkBuffer.length} bytes, offset: ${offsetBytes}/${totalBytes}`);
 
-          socket.write(chunkBuffer); // sin callback
+          const puedeEscribirMas = socket.write(chunkBuffer);
 
           bytesSent += chunkBuffer.length;
           if (typeof onProgreso === 'function') onProgreso(bytesSent, totalBytes);
 
-          // Yield para no bloquear el event loop entre chunks
-          await new Promise(r => setTimeout(r, 50));
-          enviarChunk();
+          if (puedeEscribirMas) {
+            // Buffer no saturado — siguiente chunk de inmediato (sin setTimeout)
+            setImmediate(() => enviarChunk());
+          } else {
+            // Buffer saturado — esperamos drain antes del siguiente chunk
+            log('Backpressure: esperando drain antes del próximo chunk...');
+            socket.once('drain', () => {
+              log('Drain recibido, continuando chunks...');
+              enviarChunk();
+            });
+          }
 
         } catch (err) {
           socket.destroy();
