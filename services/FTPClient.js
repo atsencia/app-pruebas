@@ -61,52 +61,71 @@ export default class FTPClient {
   // OPERACIONES DE ARCHIVO
   // ──────────────────────────────────────────────────────────
 
-  async subirArchivo(contenido, rutaRemota, esBase64 = false, onProgreso = null) {
-    const buffer = esBase64
-      ? Buffer.from(contenido, 'base64')
-      : Buffer.from(contenido, 'utf8');
+async subirArchivo(contenido, rutaRemota, esBase64 = false, onProgreso = null) {
+  return this._ejecutarConRetry(() =>
+    this._subirArchivoInterno(contenido, rutaRemota, esBase64, onProgreso)
+  );
+}
 
-    const totalBytes = buffer.length;
-    log(`Subiendo archivo → ${rutaRemota} (${totalBytes} bytes)`);
+async _subirArchivoInterno(contenido, rutaRemota, esBase64 = false, onProgreso = null) {
+  const buffer = esBase64
+    ? Buffer.from(contenido, 'base64')
+    : Buffer.from(contenido, 'utf8');
 
-    const { host: dataHost, port: dataPort } = await this._entrarModoPasivo();
+  const totalBytes = buffer.length;
+  log(`Subiendo archivo → ${rutaRemota} (${totalBytes} bytes)`);
 
-    const espera150 = this._waitForAnyCode(['125', '150']);
-    const espera226 = this._waitForCode('226', TIMEOUT_TRANSFER);
+  const { host: dataHost, port: dataPort } = await this._entrarModoPasivo();
+  const espera150 = this._waitForAnyCode(['125', '150']);
+  const espera226 = this._waitForCode('226', TIMEOUT_TRANSFER);
+  const { socket: dataSocket, conectado } = this._crearSocketDatos(dataHost, dataPort);
+  this._enviarLinea(`STOR ${rutaRemota}`);
 
-    const { socket: dataSocket, conectado } = this._crearSocketDatos(dataHost, dataPort);
-    this._enviarLinea(`STOR ${rutaRemota}`);
-
-    await Promise.all([conectado, espera150]);
-
-    await this._enviarBufferPorSocket(dataSocket, buffer, totalBytes, onProgreso);
-    await espera226;
-    log(`✅ Archivo subido: ${rutaRemota}`);
+  await Promise.all([conectado, espera150]);
+  await this._enviarBufferPorSocket(dataSocket, buffer, totalBytes, onProgreso);
+  await espera226;
+  log(`✅ Archivo subido: ${rutaRemota}`);
+}
+async _ejecutarConRetry(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    // 421 = timeout servidor, socket muerto
+    if (err.ftpCode === '421' || err.message?.includes('421') || 
+        err.message?.includes('cerrado') || err.message?.includes('ECONNRESET')) {
+      log('Conexión perdida, reconectando y reintentando...');
+      await this.reconectar();
+      return await fn(); // segundo intento
+    }
+    throw err; // otro error: relanzar
   }
+}
+ async subirArchivoDesdeURI(uriLocal, rutaRemota, onProgreso = null) {
+  return this._ejecutarConRetry(() =>
+    this._subirArchivoDesdeURIInterno(uriLocal, rutaRemota, onProgreso)
+  );
+}
 
-  async subirArchivoDesdeURI(uriLocal, rutaRemota, onProgreso = null) {
-    log(`Subiendo desde URI → ${rutaRemota}`);
+// ✅ Interno — el cuerpo real
+async _subirArchivoDesdeURIInterno(uriLocal, rutaRemota, onProgreso = null) {
+  log(`Subiendo desde URI → ${rutaRemota}`);
 
-    const fileInfo = await FileSystem.getInfoAsync(uriLocal, { size: true });
-    if (!fileInfo.exists) throw new Error(`Archivo no encontrado: ${uriLocal}`);
-    const totalBytes = fileInfo.size;
-    log(`Tamaño: ${(totalBytes / 1024).toFixed(1)} KB`);
+  const fileInfo = await FileSystem.getInfoAsync(uriLocal, { size: true });
+  if (!fileInfo.exists) throw new Error(`Archivo no encontrado: ${uriLocal}`);
+  const totalBytes = fileInfo.size;
+  log(`Tamaño: ${(totalBytes / 1024).toFixed(1)} KB`);
 
-    const { host: dataHost, port: dataPort } = await this._entrarModoPasivo();
+  const { host: dataHost, port: dataPort } = await this._entrarModoPasivo();
+  const espera150 = this._waitForAnyCode(['125', '150']);
+  const espera226 = this._waitForCode('226', TIMEOUT_TRANSFER);
+  const { socket: dataSocket, conectado } = this._crearSocketDatos(dataHost, dataPort);
+  this._enviarLinea(`STOR ${rutaRemota}`);
 
-    const espera150 = this._waitForAnyCode(['125', '150']);
-    const espera226 = this._waitForCode('226', TIMEOUT_TRANSFER);
-
-    const { socket: dataSocket, conectado } = this._crearSocketDatos(dataHost, dataPort);
-    this._enviarLinea(`STOR ${rutaRemota}`);
-
-    await Promise.all([conectado, espera150]);
-
-    await this._enviarChunksPorSocket(dataSocket, uriLocal, totalBytes, onProgreso);
-    await espera226;
-    log(`✅ Archivo subido desde URI: ${rutaRemota}`);
-  }
-
+  await Promise.all([conectado, espera150]);
+  await this._enviarChunksPorSocket(dataSocket, uriLocal, totalBytes, onProgreso);
+  await espera226;
+  log(`✅ Archivo subido desde URI: ${rutaRemota}`);
+}
   async crearDirectorio(ruta) {
     try {
       await this._sendCommand(`MKD ${ruta}`, '257');
@@ -192,12 +211,16 @@ export default class FTPClient {
         clearTimeout(waiter.timer);
         waiter.resolve(linea);
       } else if (codigo.startsWith('4') || codigo.startsWith('5')) {
-        if (this._waiters.length > 0) {
-          const waiter = this._waiters.shift();
-          clearTimeout(waiter.timer);
-          waiter.reject(new Error(`FTP Error ${codigo}: ${linea.substring(4)}`));
-        }
-      }
+  if (this._waiters.length > 0) {
+    const waiter = this._waiters.shift();
+    clearTimeout(waiter.timer);
+
+    // ✅ Si es timeout del servidor, marcarlo para reconexión
+    const error = new Error(`FTP Error ${codigo}: ${linea.substring(4)}`);
+    error.ftpCode = codigo; // ← agrega esto
+    waiter.reject(error);
+  }
+}
     }
   }
 
@@ -322,12 +345,12 @@ export default class FTPClient {
         if (typeof onProgreso === 'function') onProgreso(totalBytes, totalBytes);
 
         // 'finish' se emite cuando el FIN TCP fue enviado y el buffer está vacío
-        socket.once('finish', () => {
-          log('Socket de datos cerrado limpiamente (finish).');
-          resolve();
-        });
+        socket.once('close', () => {
+        log('Socket de datos cerrado limpiamente (close).');
+        resolve();
+      });
 
-        socket.end();
+      socket.end();
       };
 
       setImmediate(() => {
@@ -354,6 +377,27 @@ export default class FTPClient {
     });
   }
 
+
+
+//NUEVA CLASE DE RECONECTAR
+  async reconectar() {
+  log('Reconectando...');
+  try {
+    if (this._controlSocket) {
+      this._controlSocket.destroy();
+      this._controlSocket = null;
+    }
+    this._buffer  = '';
+    this._waiters = [];
+  } catch (_) {}
+
+  await this._abrirControlSocket();
+  await this._waitForCode('220');
+  await this._sendCommand(`USER ${this.user}`, '331');
+  await this._sendCommand(`PASS ${this.password}`, '230');
+  await this._sendCommand('TYPE I', '200');
+  log('Reconexión exitosa.');
+}
   // ──────────────────────────────────────────────────────────
   // ✅ REFACTORIZADO: enviar archivo pesado en chunks
   //
@@ -384,8 +428,8 @@ export default class FTPClient {
       const cerrar = () => {
         log(`Todos los chunks enviados (${bytesSent} bytes), cerrando socket...`);
 
-        socket.once('finish', () => {
-          log('Socket de datos cerrado limpiamente (finish).');
+        socket.once('close', () => {
+          log('Socket de datos cerrado limpiamente (close).');
           resolve();
         });
 
@@ -461,3 +505,4 @@ export default class FTPClient {
     });
   }
 }
+

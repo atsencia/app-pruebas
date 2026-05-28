@@ -22,10 +22,14 @@ try {
 }
 
 // ── Configuración ────────────────────────────────────────────
-const TAREA_BG          = 'FTP_QUEUE_BG_TASK';
-const INTERVALO_MS      = 8_000;
-const MAX_PARALELOS     = 10;
-const BYTES_ARCHIVO_MAX = 50 * 1024 * 1024;
+const TAREA_BG      = 'FTP_QUEUE_BG_TASK';
+const INTERVALO_MS  = 8_000;
+
+// ✅ Reducido a 2 subidas paralelas.
+// Con 10 paralelos y archivos de 30-100 MB cada uno, el ancho de banda
+// se divide entre todos y ninguno termina a tiempo.
+// Con 2, cada subida tiene banda suficiente para completar.
+const MAX_PARALELOS = 2;
 
 let _timer     = null;
 let _enProceso = new Set();
@@ -53,10 +57,10 @@ async function hayConexion() {
   } catch { return false; }
 }
 
-// ── Guardar fotos en álbum (sin pedir permisos — ya se pidieron en el form) ──
+// ── Guardar fotos en álbum ───────────────────────────────────
 async function guardarEnAlbum(formulario) {
   try {
-    const { status } = await MediaLibrary.getPermissionsAsync(); // solo consulta
+    const { status } = await MediaLibrary.getPermissionsAsync();
     if (status !== 'granted') return;
 
     const nombreAlbum = `Acta - ${
@@ -96,19 +100,6 @@ async function borrarArchivosLocales(formulario) {
   }
 }
 
-// ── Timeout según peso estimado ──────────────────────────────
-function timeoutParaFormulario(formulario) {
-  const archivos = [
-    ...(formulario.fotos        || []),
-    ...(formulario.fotosFachada || []),
-    ...(formulario.videos       || []),
-  ];
-  const pesoEstimado = archivos.length * 5 * 1024 * 1024;
-  if (pesoEstimado > BYTES_ARCHIVO_MAX)      return 8 * 60_000;
-  if (pesoEstimado > 20 * 1024 * 1024)      return 5 * 60_000;
-  return 3 * 60_000;
-}
-
 // ── Procesar un ítem ─────────────────────────────────────────
 async function procesarItem(item) {
   if (_enProceso.has(item.id)) return;
@@ -117,25 +108,28 @@ async function procesarItem(item) {
   await actualizarEstado(item.id, ESTADO.SUBIENDO);
   notificar({ tipo: 'inicio', id: item.id });
 
-  const timeout = timeoutParaFormulario(item.formulario);
+  try {
+    // ✅ Sin Promise.race ni timeout arbitrario.
+    //
+    // Antes: un timeout de 3-8 min mataba la subida aunque el FTPClient
+    //        estuviera funcionando bien. Con videos pesados por red móvil
+    //        eso era insuficiente y lanzaba el error 226 falso.
+    //
+    // Ahora: la subida corre sin límite de tiempo desde el worker.
+    //        El único control de tiempo está en FTPClient.js donde
+    //        TIMEOUT_TRANSFER = 300_000 ms (5 min) por archivo individual,
+    //        que es el lugar correcto para manejarlo.
+    //
+    // Si la red cae, el FTPClient lanzará su propio error de socket/timeout
+    // y llegará aquí como catch normal — sin matar subidas válidas.
 
-  const promesaSubida = (async () => {
     await guardarEnAlbum(item.formulario);
-    return await subirFormularioFTP(
+
+    const resultado = await subirFormularioFTP(
       item.formulario,
       (pct, msg) => notificar({ tipo: 'progreso', id: item.id, pct, msg })
     );
-  })();
 
-  const promesaTimeout = new Promise((_, reject) =>
-    setTimeout(
-      () => reject(new Error(`Timeout: conexión lenta o archivo muy pesado (${timeout / 60000} min)`)),
-      timeout
-    )
-  );
-
-  try {
-    const resultado = await Promise.race([promesaSubida, promesaTimeout]);
     if (!resultado.success) throw new Error(resultado.mensaje);
 
     await actualizarEstado(item.id, ESTADO.COMPLETADO, {
@@ -147,7 +141,11 @@ async function procesarItem(item) {
   } catch (error) {
     console.error('[QueueWorker] Error en item', item.id, ':', error.message);
 
-    const esTimeout = error.message.toLowerCase().includes('timeout');
+    const esSinConexion = error.message.toLowerCase().includes('timeout') ||
+                          error.message.toLowerCase().includes('network') ||
+                          error.message.toLowerCase().includes('conexión') ||
+                          error.message.toLowerCase().includes('socket');
+
     const actualizado = await incrementarReintentos(item.id, error.message);
 
     notificar({
@@ -156,10 +154,10 @@ async function procesarItem(item) {
       mensaje:    error.message,
       reintentos: actualizado?.reintentos ?? 0,
       definitivo: actualizado?.estado === ESTADO.ERROR,
-      esTimeout,
+      esTimeout:  esSinConexion,
     });
 
-    if (esTimeout) {
+    if (esSinConexion) {
       const sigue = await hayConexion();
       if (!sigue) notificar({ tipo: 'sin_conexion' });
     }
@@ -189,8 +187,7 @@ async function tick() {
   pendientes.slice(0, slots).forEach(item => procesarItem(item));
 }
 
-// ── Registrar tarea background UNA SOLA VEZ al cargar el módulo ──
-// defineTask debe estar en el nivel raíz, no dentro de funciones async
+// ── Registrar tarea background ───────────────────────────────
 if (TaskManager) {
   try {
     TaskManager.defineTask(TAREA_BG, async () => {
@@ -208,9 +205,8 @@ if (TaskManager) {
 
 // ── API pública ──────────────────────────────────────────────
 export async function iniciarWorker() {
-  if (_timer) return; // ya corriendo
+  if (_timer) return;
 
-  // Registrar background fetch si está disponible
   if (BackgroundFetch && TaskManager) {
     try {
       await BackgroundFetch.registerTaskAsync(TAREA_BG, {
