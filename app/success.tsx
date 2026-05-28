@@ -95,16 +95,16 @@ const handleCopiar = async () => {
         </Animated.View>
 
         <Animated.View style={[styles.registroCard, { opacity: fadeAnim }]}>
-            <Text style={styles.registroLabel}>Link del Acta</Text>
+            {/* <Text style={styles.registroLabel}>Link del Acta</Text> */}
 
             {/* URL del acta */}
-            <View style={styles.urlBox}>
+            {/* <View style={styles.urlBox}>
               <Feather name="link" size={13} color={C.primary} />
               <Text style={styles.urlText} numberOfLines={2}>{actaUrl}</Text>
-            </View>
+            </View> */}
 
             {/* Botón copiar */}
-            <Pressable
+            {/* <Pressable
               style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.8 }, copiado && styles.copyBtnDone]}
               onPress={handleCopiar}
             >
@@ -112,7 +112,7 @@ const handleCopiar = async () => {
               <Text style={[styles.copyBtnText, copiado && styles.copyBtnTextDone]}>
                 {copiado ? "¡Copiado!" : "Copiar enlace"}
               </Text>
-            </Pressable>
+            </Pressable> */}
 
             <View style={styles.registerDivider} />
 

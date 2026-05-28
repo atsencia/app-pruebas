@@ -204,6 +204,45 @@ function SelectField({ label, value, options, onChange, defaultEmpty }: SelectFi
 }
 
 // ─────────────────────────────────────────────
+// SUB-COMPONENTE: COLLAPSIBLE SECTION (con badge de estado)
+// ─────────────────────────────────────────────
+
+interface CollapsibleSectionProps {
+  icon: any;
+  title: string;
+  filled: boolean;
+  filledLabel?: string;
+  emptyLabel?: string;
+  children: React.ReactNode;
+}
+
+function CollapsibleSection({
+  icon, title, filled, filledLabel = "Con datos", emptyLabel = "Sin información",
+  children,
+}: CollapsibleSectionProps) {
+  const [open, setOpen] = useState(false);
+  const bgColor     = filled ? "#E6F4EA" : C.card;
+  const borderColor = filled ? "#4CAF50" : C.border;
+  const iconBgColor = filled ? "#C8E6C9" : C.primary + "15";
+  const iconColor   = filled ? "#2E7D32" : C.primary;
+  return (
+    <View style={[styles.section, { backgroundColor: bgColor, borderWidth: filled ? 1.5 : 0, borderColor }]}>
+      <Pressable style={styles.sectionHeader} onPress={() => setOpen(!open)} android_ripple={{ color: "rgba(0,0,0,0.05)" }}>
+        <View style={[styles.sectionIconBg, { backgroundColor: iconBgColor }]}>
+          <Feather name={icon} size={14} color={iconColor} />
+        </View>
+        <Text style={[styles.sectionTitle, filled && { color: "#2E7D32" }]}>{title}</Text>
+        <View style={[styles.sigBadge, { backgroundColor: filled ? "#E6F4EA" : "#FFF3E0", marginLeft: 8, paddingHorizontal: 6 }]}>
+          <Feather name={filled ? "check-circle" : "alert-circle"} size={15} color={filled ? "#2E7D32" : "#E65100"} />
+        </View>
+        <Feather name={open ? "chevron-up" : "chevron-down"} size={16} color={filled ? "#2E7D32" : C.textSecondary} style={{ marginLeft: "auto" }} />
+      </Pressable>
+      {open && <View style={styles.sectionBody}>{children}</View>}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────
 // SUB-COMPONENTE: FIRMA SECTION (colapsable)
 // ─────────────────────────────────────────────
 
@@ -260,6 +299,43 @@ export default function FormScreen() {
   const insets           = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleActaSeleccionada = async (registro_uuid: string) => {
+    try {
+      setLoadingActa(true);
+      const url = `https://187.33.154.112.sslip.io/backend/api/registros/${registro_uuid}/acta`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${user?.token}`,
+        },
+      });
+      console.log(response);
+      if (!response.ok) throw new Error("Error al cargar el acta");
+      const data = await response.json();
+      console.log("📦 Data backend:", data);
+      const registro = Array.isArray(data)
+        ? data[0]
+        : data.registro ?? data.data ?? data.acta ?? data;
+      if (!registro) throw new Error("No se encontraron datos");
+      console.log("✅ Registro normalizado:", registro);
+      setField("nombre",      registro.nombre      || "");
+      setField("cedula",      registro.cedula      || "");
+      setField("direccion",   registro.direccion   || "");
+      setField("tipoActa",    registro.tipo_acta   || "");
+      setField("propCorreo",  registro.prop_correo || "");
+      setField("interCorreo", registro.inter_correo || "");
+      setField("interNombre", registro.inter_nombre || "");
+      setField("interCargo",  registro.inter_cargo  || "");
+      router.push({ pathname: "/form", params: { registro_uuid } });
+    } catch (error: any) {
+      console.error("💥 Error:", error);
+      Alert.alert("Error", error.message || "No se pudo cargar el acta");
+    } finally {
+      setLoadingActa(false);
+    }
+  };
 
   // ── Cargar acta existente ──────────────────
   useEffect(() => {
@@ -350,7 +426,6 @@ export default function FormScreen() {
     setTimeout(() => router.push(route as any), 240);
   };
 
-  // ── Cargar acta Movistar desde sidebar ─────
   const cargarActaMovistar = (uuid: string) => {
     closeSidebar();
     setTimeout(() => {
@@ -514,6 +589,11 @@ export default function FormScreen() {
     }
   };
 
+  // ── Preguardado ─────────────────────────────
+  const handlePreguardado = async () => {
+    console.log("hola mundo");
+  };
+
   const handleLogout = async () => { await logout(); router.replace("/login"); };
 
   // ─────────────────────────────────────────────
@@ -580,8 +660,13 @@ export default function FormScreen() {
         </View>
 
         {/* 1. DATOS DEL VECINO / PROPIETARIO */}
-        <Section icon="user" title="Datos del Vecino / Propietario">
-
+        <CollapsibleSection
+          icon="user"
+          title="Datos del Propietario"
+          filled={!!((form.nombre ?? "").trim() && (form.cedula ?? "").trim() && (form.direccion ?? "").trim())}
+          filledLabel="Datos completos"
+          emptyLabel="Faltan datos"
+        >
           {/* Bloqueo visual cuando es edición desde Actas Movistar */}
           {isEditing && (
             <View style={styles.lockedBanner}>
@@ -686,7 +771,7 @@ export default function FormScreen() {
               </View>
             </View>
           )}
-        </Section>
+        </CollapsibleSection>
 
         {/* 2. INTERVENTORÍA */}
         <Section icon="briefcase" title="Interventoría">
@@ -740,7 +825,53 @@ export default function FormScreen() {
           <ToggleField label="¿Está ocupada actualmente?" value={form.estaOcupada} onChange={(v) => set("estaOcupada", v)} />
         </Section>
 
-        {/* 4. SERVICIOS PÚBLICOS */}
+        {/* 4. INSPECCIÓN DE FACHADA Y UBICACIÓN */}
+        <CollapsibleSection
+          icon="map"
+          title="Fachada y Ubicación"
+          filled={
+            form.latitud !== null ||
+            form.fotosFachada.length > 0 ||
+            !!(form.acabadosPisos ?? "").trim() ||
+            !!(form.estadoFachada ?? "").trim()
+          }
+          filledLabel="Con información"
+          emptyLabel="Sin georef ni fotos"
+        >
+          <InfoBox text="Registra la ubicación del predio, el estado exterior, y adjunta las fotografías de fachada." />
+          <View style={styles.fachadaSubHeader}>
+            <View style={styles.fachadaSubIconBg}><Feather name="map-pin" size={12} color={C.primary} /></View>
+            <Text style={styles.fachadaSubTitle}>Georeferenciación</Text>
+          </View>
+          <MapPicker latitud={form.latitud} longitud={form.longitud}
+            onLocationChange={(lat, lng) => { setField("latitud", lat); setField("longitud", lng); }} />
+          <View style={styles.fachadaDivider} />
+          <View style={styles.fachadaSubHeader}>
+            <View style={styles.fachadaSubIconBg}><Feather name="grid" size={12} color={C.primary} /></View>
+            <Text style={styles.fachadaSubTitle}>Acabados y Estado de Fachada</Text>
+          </View>
+          <Field label="Tipo de acabados en pisos y su estado">
+            <TextInput style={[styles.input, styles.inputMultilineSmall]}
+              placeholder="Ej. Cerámica — buen estado, sin grietas visibles" placeholderTextColor={C.textSecondary}
+              value={form.acabadosPisos} onChangeText={(v) => set("acabadosPisos", v)} multiline numberOfLines={2} />
+          </Field>
+          <Field label="Estado de la fachada">
+            <TextInput style={[styles.input, styles.inputMultilineSmall]}
+              placeholder="Ej. Pintura — buen estado, con mantenimiento reciente" placeholderTextColor={C.textSecondary}
+              value={form.estadoFachada} onChangeText={(v) => set("estadoFachada", v)} multiline numberOfLines={2} />
+          </Field>
+          <View style={styles.fachadaDivider} />
+          <View style={styles.fachadaSubHeader}>
+            <View style={styles.fachadaSubIconBg}><Feather name="image" size={12} color={C.primary} /></View>
+            <Text style={styles.fachadaSubTitle}>Fotografías de Fachada</Text>
+          </View>
+          <Text style={styles.fachadaSubDesc}>
+            Fotos del exterior del predio. Se guardarán como fachada_001.jpg, fachada_002.jpg, etc.
+          </Text>
+          <PhotoPickerSection photos={form.fotosFachada} onPhotosChange={(fotos) => set("fotosFachada", fotos)} />
+        </CollapsibleSection>
+
+        {/* 5. SERVICIOS PÚBLICOS */}
         <Section icon="zap" title="Servicios Públicos">
           <InfoBox text="Seleccione el estado de cada servicio. En 'Otros' describa servicios adicionales." />
           <View style={styles.servicesGrid}>
@@ -760,7 +891,7 @@ export default function FormScreen() {
           </View>
         </Section>
 
-        {/* 5. USO ACTUAL */}
+        {/* 6. USO ACTUAL */}
         <Section icon="layers" title="Uso Actual del Predio">
           <InfoBox text="Seleccione el uso. Sin selección se enviará como 'N/A'." />
           {USOS_ACTUALES.map(({ key, label }) => (
@@ -774,7 +905,7 @@ export default function FormScreen() {
           ))}
         </Section>
 
-        {/* 6. ACCESO VEHICULAR */}
+        {/* 7. ACCESO VEHICULAR */}
         <Section icon="truck" title="Acceso Vehicular">
           <ToggleField label="¿Tiene garaje?" value={form.tieneGaraje} onChange={(v) => set("tieneGaraje", v)} />
           {form.tieneGaraje && (
@@ -815,7 +946,7 @@ export default function FormScreen() {
           </Field>
         </Section>
 
-        {/* 7. EVALUACIÓN ESTRUCTURAL */}
+        {/* 8. EVALUACIÓN ESTRUCTURAL */}
         <Section icon="alert-triangle" title="Evaluación Estructural">
           <InfoBox text="Las fisuras son discontinuidades en muros, vigas, columnas, losas y placas de entrepiso." />
           <ToggleField label="Fisuras cerradas" description="Discontinuidad cerrada que no afecta la calidad estructural."
@@ -843,7 +974,7 @@ export default function FormScreen() {
           )}
         </Section>
 
-        {/* 8. VERTICALIDAD */}
+        {/* 9. VERTICALIDAD */}
         {showVerticalidad && (
           <Section icon="bar-chart-2" title="Verticalidad (≥4 niveles)">
             <InfoBox text="Verificar por topografía la verticalidad a lo largo de un vértice de la edificación." />
@@ -857,7 +988,7 @@ export default function FormScreen() {
           </Section>
         )}
 
-        {/* 9. DOCUMENTACIÓN ADICIONAL */}
+        {/* 10. DOCUMENTACIÓN ADICIONAL */}
         <Section icon="file-text" title="Documentación Adicional">
           <ToggleField label="Plano de ubicación topográfica radicado"
             description="Incluye predios, vías y demás zonas involucradas en la actividad."
@@ -869,41 +1000,6 @@ export default function FormScreen() {
               value={form.observacionesProfesional} onChangeText={(v) => set("observacionesProfesional", v)}
               multiline numberOfLines={4} />
           </Field>
-        </Section>
-
-        {/* 10. FACHADA */}
-        <Section icon="map" title="Inspección de Fachada y Ubicación">
-          <InfoBox text="Registra la ubicación del predio, el estado exterior, y adjunta las fotografías de fachada." />
-          <View style={styles.fachadaSubHeader}>
-            <View style={styles.fachadaSubIconBg}><Feather name="map-pin" size={12} color={C.primary} /></View>
-            <Text style={styles.fachadaSubTitle}>Georeferenciación</Text>
-          </View>
-          <MapPicker latitud={form.latitud} longitud={form.longitud}
-            onLocationChange={(lat, lng) => { setField("latitud", lat); setField("longitud", lng); }} />
-          <View style={styles.fachadaDivider} />
-          <View style={styles.fachadaSubHeader}>
-            <View style={styles.fachadaSubIconBg}><Feather name="grid" size={12} color={C.primary} /></View>
-            <Text style={styles.fachadaSubTitle}>Acabados y Estado de Fachada</Text>
-          </View>
-          <Field label="Tipo de acabados en pisos y su estado">
-            <TextInput style={[styles.input, styles.inputMultilineSmall]}
-              placeholder="Ej. Cerámica — buen estado, sin grietas visibles" placeholderTextColor={C.textSecondary}
-              value={form.acabadosPisos} onChangeText={(v) => set("acabadosPisos", v)} multiline numberOfLines={2} />
-          </Field>
-          <Field label="Estado de la fachada">
-            <TextInput style={[styles.input, styles.inputMultilineSmall]}
-              placeholder="Ej. Pintura — buen estado, con mantenimiento reciente" placeholderTextColor={C.textSecondary}
-              value={form.estadoFachada} onChangeText={(v) => set("estadoFachada", v)} multiline numberOfLines={2} />
-          </Field>
-          <View style={styles.fachadaDivider} />
-          <View style={styles.fachadaSubHeader}>
-            <View style={styles.fachadaSubIconBg}><Feather name="image" size={12} color={C.primary} /></View>
-            <Text style={styles.fachadaSubTitle}>Fotografías de Fachada</Text>
-          </View>
-          <Text style={styles.fachadaSubDesc}>
-            Fotos del exterior del predio. Se guardarán como fachada_001.jpg, fachada_002.jpg, etc.
-          </Text>
-          <PhotoPickerSection photos={form.fotosFachada} onPhotosChange={(fotos) => set("fotosFachada", fotos)} />
         </Section>
 
         {/* 11. FOTOGRAFÍAS GENERALES */}
@@ -1060,6 +1156,15 @@ export default function FormScreen() {
           </View>
         )}
 
+        {/* PREGUARDADO */}
+        <Pressable
+          style={({ pressed }) => [styles.preguardadoBtn, pressed && styles.submitBtnPressed]}
+          onPress={handlePreguardado}
+        >
+          <Feather name="save" size={18} color={C.primary} />
+          <Text style={styles.preguardadoText}>Preguardado</Text>
+        </Pressable>
+
         {/* ENVIAR */}
         <Pressable
           style={({ pressed }) => [styles.submitBtn, pressed && styles.submitBtnPressed, isSubmitting && styles.submitBtnDisabled]}
@@ -1111,7 +1216,7 @@ export default function FormScreen() {
         <View style={styles.sidebarDivider} />
 
         {/* ★ Actas Movistar — AQUÍ, dentro del sidebar ★ */}
-        <ActasMovistar onActaSeleccionada={cargarActaMovistar} />
+        {/* <ActasMovistar onActaSeleccionada={handleActaSeleccionada} /> */}
 
         <View style={styles.sidebarDivider} />
 
@@ -1272,7 +1377,6 @@ const styles = StyleSheet.create({
   sigBadge:     { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#E6F4EA", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, marginLeft: 8 },
   sigBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#2E7D32" },
 
-  // Banner de bloqueo
   lockedBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8,
     backgroundColor: "#F5F3FF", borderRadius: 10, padding: 10,
     borderLeftWidth: 3, borderLeftColor: "#7C3AED" },
@@ -1349,6 +1453,14 @@ const styles = StyleSheet.create({
   uploadNote: { flexDirection: "row", alignItems: "flex-start", gap: 7,
     backgroundColor: C.inputBg, borderRadius: 10, padding: 10, marginTop: 4, borderWidth: 1, borderColor: C.border },
   uploadNoteText: { flex: 1, fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 16 },
+
+  preguardadoBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    backgroundColor: C.card, borderRadius: 16, paddingVertical: 17, marginTop: 4,
+    borderWidth: 2, borderColor: C.primary,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 6, elevation: 3,
+  },
+  preguardadoText: { fontSize: 17, fontFamily: "Inter_700Bold", color: C.primary, letterSpacing: -0.2 },
 
   submitBtn:         { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
     backgroundColor: C.accent, borderRadius: 16, paddingVertical: 19, marginTop: 4,

@@ -27,29 +27,26 @@ interface ActaPredeterminada {
 
 const ACTAS_PREDETERMINADAS: ActaPredeterminada[] = [
   {
-    registro_uuid: 'uuid-001',
-    direccion:     'Calle 123 #45-67, Bogotá',
-    nombre:        'Predio Norte 1',
-    estado:        'pendiente',
-  },
+    registro_uuid: '202605061520212_E81F',
+    direccion: 'Calle 65 bis 86 86, Zona 2B',
+    nombre: 'Alejandra Leon',
+   },
   {
-    registro_uuid: 'uuid-002',
-    direccion:     'Carrera 80 #12-34, Medellín',
-    nombre:        'Predio Sur A',
-    estado:        'firmada',
-  },
+    registro_uuid: '202605061516167_VJMB',
+    direccion: 'Calle 182-218 #171, Zona B',
+    nombre: 'Jorge Alejandro Toro',
+   },
   {
-    registro_uuid: 'uuid-003',
-    direccion:     'Av. El Dorado #68B-31, Bogotá',
-    nombre:        'Predio Centro',
-    estado:        'devuelta',
-  },
+    registro_uuid: '202605061444061_7IJB',
+    direccion: 'Movistar, Zona C',
+    nombre: 'Alejandro Toro',
+   },
   {
-    registro_uuid: 'uuid-004',
-    direccion:     'Calle 10 #5-20, Cali',
-    nombre:        'Predio Oeste 2',
-    estado:        'correcta',
-  },
+    registro_uuid: '202605061215338_8EEK',
+    direccion: 'Dirección Chapinero de prueba, Zona B movistar',
+    nombre: 'Roberto Gómez Bolaños',
+   }
+   
 ];
 // ─────────────────────────────────────────────────────────────────
 

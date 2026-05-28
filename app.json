@@ -2,24 +2,21 @@
   "expo": {
     "name": "Registro Vecinal",
     "slug": "my-app",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#1E3A5F"
     },
-
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.myapp"
     },
-
     "android": {
       "package": "com.myapp",
       "adaptiveIcon": {
@@ -33,11 +30,16 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
       ]
     },
-
     "plugins": [
       [
         "expo-image-picker",
@@ -64,16 +66,13 @@
       ],
       "expo-secure-store"
     ],
-
     "web": {
       "favicon": "./assets/images/favicon.png"
     },
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-
     "extra": {
       "router": {
         "origin": "https://replit.com/"
@@ -81,6 +80,12 @@
       "eas": {
         "projectId": "0e390c6b-ac18-475f-9f54-d11c3c4b08fb"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0e390c6b-ac18-475f-9f54-d11c3c4b08fb"
     }
   }
 }
