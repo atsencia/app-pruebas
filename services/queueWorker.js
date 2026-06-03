@@ -127,7 +127,8 @@ async function procesarItem(item) {
 
     const resultado = await subirFormularioFTP(
       item.formulario,
-      (pct, msg) => notificar({ tipo: 'progreso', id: item.id, pct, msg })
+      (pct, msg) => notificar({ tipo: 'progreso', id: item.id, pct, msg }),
+      item.token  // ← agregar acá
     );
 
     if (!resultado.success) throw new Error(resultado.mensaje);
