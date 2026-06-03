@@ -3,8 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { encolar, obtenerEstadisticas, reintentarItem, limpiarCompletados } from '@/services/uploadQueue';
 import { suscribir, forzarProcesar } from '@/services/queueWorker';
+import { useAuth } from '@/contexts/AuthContext'; // ← falta este import
+
 
 export function useUploadQueue() {
+  const { user } = useAuth(); // ← falta esta línea
+
   const [stats, setStats] = useState({
     total: 0, pendientes: 0, subiendo: 0, completados: 0, errores: 0, items: [],
   });
@@ -27,11 +31,11 @@ export function useUploadQueue() {
   }, [refrescar]);
 
   const agregarALaCola = useCallback(async (formulario) => {
-    const item = await encolar(formulario);
+    const item = await encolar(formulario, user?.token);  // ← pasar token
     await refrescar();
     forzarProcesar(); // intentar subir inmediatamente
     return item;
-  }, [refrescar]);
+  }, [refrescar, user?.token]); 
 
   const reintentar = useCallback(async (id) => {
     await reintentarItem(id);
