@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Registro Vecinal",
+    "name": "App Vecindad",
     "slug": "my-app",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/senciaLogo.jpeg",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
