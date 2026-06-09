@@ -32,10 +32,9 @@ async function guardarCola(cola) {
 
 // ── Agregar un formulario a la cola ──────────────────────────
 // Devuelve el ítem creado
-export async function encolar(formulario) {
+export async function encolar(formulario, token = null) {
   const cola = await leerCola();
 
-  // Evitar duplicados por registro_uuid
   const yaExiste = cola.some(
     (i) => i.formulario.registro_uuid &&
            i.formulario.registro_uuid === formulario.registro_uuid &&
@@ -45,7 +44,8 @@ export async function encolar(formulario) {
 
   const item = {
     id:          formulario.registro_uuid || `local_${Date.now()}`,
-    formulario,  // objeto completo que se pasará a subirFormularioFTP
+    formulario,
+    token,        // ← agregar acá
     estado:      ESTADO.PENDIENTE,
     reintentos:  0,
     creadoEn:    new Date().toISOString(),

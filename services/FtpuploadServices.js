@@ -280,7 +280,9 @@ function construirDatosJSON(id, formulario, listaMultimedia) {
 }
 
 // ==================== FUNCIÓN PRINCIPAL ====================
-export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
+// ==================== FUNCIÓN PRINCIPAL ====================
+export async function subirFormularioFTP(formulario, onProgreso = () => {}, token = null) {
+  //                                                         ↑ agregar token como parámetro
   const id      = formulario.registro_uuid || generarIDUnico();
   const carpeta = `${FTP_CONFIG.baseDir}/${id}`;
   const ftp     = new FTPClient(FTP_CONFIG);
@@ -296,7 +298,6 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
     onProgreso(10, 'Preparando archivos multimedia y firmas...');
     listaMultimedia = await construirListaMultimedia(formulario);
 
-    // Construir JSON con firmas como nombres de archivo (no base64)
     const datosJSON = construirDatosJSON(id, formulario, listaMultimedia);
 
     onProgreso(15, 'Subiendo datos.json...');
@@ -306,30 +307,24 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
       false
     );
 
-    // Subir todos los archivos (fotos, fachada, firmas, videos)
     const total = listaMultimedia.length;
     for (let i = 0; i < total; i++) {
       const item = listaMultimedia[i];
       const rutaRemota = `${carpeta}/${item.nombreRemoto}`;
       const basePct = 25 + Math.round((i / total) * 65);
 
-      onProgreso(
-        basePct,
-        `Subiendo ${item.categoria} (${i + 1}/${total}): ${item.nombreRemoto}`
-      );
+      onProgreso(basePct, `Subiendo ${item.categoria} (${i + 1}/${total}): ${item.nombreRemoto}`);
 
       await ftp.subirArchivoDesdeURI(item.uriLocal, rutaRemota, (sent, totalBytes) => {
         const pct = basePct + Math.round((sent / totalBytes) * (65 / total));
         onProgreso(pct, `${item.nombreRemoto}: ${Math.round((sent / totalBytes) * 100)}%`);
       });
 
-      // Limpiar temporales del cache
       if (item.esTemporal) {
         await FileSystem.deleteAsync(item.uriLocal, { idempotent: true }).catch(() => {});
       }
     }
 
-    // Archivo .done para marcar subida completa
     await ftp.subirArchivo(
       JSON.stringify({ completado: true, timestamp: new Date().toISOString() }),
       `${carpeta}/.done`,
@@ -337,20 +332,48 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}) {
     );
 
     await ftp.disconnect();
-    onProgreso(100, '¡Registro enviado correctamente!');
 
+    // ✅ VALIDACIÓN — acá sí, después del éxito FTP
+    onProgreso(98, 'Validando integridad de la subida...');
+    if (token) {
+      try {
+        const validacion = await fetch(
+          `https://187.33.154.112.sslip.io/backend/api/registros/${id}/validar`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const resultado = await validacion.json();
+
+        if (!resultado.completo) {
+          console.warn('[FTPUpload] Subida incompleta:', resultado.faltantes);
+          onProgreso(100, `⚠️ Subida parcial: faltan ${resultado.faltantes.length} archivos`);
+          return {
+            success:   true,   // FTP funcionó, pero incompleto
+            id,
+            carpeta:   id,
+            completo:  false,
+            faltantes: resultado.faltantes,
+            mensaje:   `Subida parcial: faltan ${resultado.faltantes.length} archivos`,
+          };
+        }
+      } catch (e) {
+        console.warn('[FTPUpload] No se pudo validar por HTTP:', e.message);
+        // No bloqueamos — la subida FTP fue exitosa
+      }
+    }
+
+    onProgreso(100, '¡Registro enviado correctamente!');
     return {
-      success: true,
+      success:  true,
+      completo: true,
       id,
-      carpeta: id,
-      mensaje: 'Registro enviado correctamente',
+      carpeta:  id,
+      mensaje:  'Registro enviado correctamente',
     };
 
   } catch (error) {
     console.error('[FTPUpload] Error:', error);
     try { await ftp.disconnect(); } catch (_) {}
 
-    // Limpiar temporales aunque haya error
     for (const item of listaMultimedia) {
       if (item.esTemporal) {
         await FileSystem.deleteAsync(item.uriLocal, { idempotent: true }).catch(() => {});

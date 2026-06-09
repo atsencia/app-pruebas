@@ -26,11 +26,14 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const TOKEN_KEY = "auth_token";
 const USER_KEY  = "auth_user";
+const API_BASE = 'https://187.33.154.112.sslip.io/backend';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  //En valicadion xd
 
+ 
   // Al arrancar, recupera sesión guardada
   useEffect(() => {
     const loadSession = async () => {
@@ -41,6 +44,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ]);
         if (token && userJson) {
           const savedUser = JSON.parse(userJson);
+
+            // ── Validar que el token sigue activo en el servidor ──
+        try {
+          const res = await fetch(`${API_BASE}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (res.status === 401 || res.status === 403) {
+            // Token expirado o inválido — limpiar y no restaurar sesión
+            await Promise.all([
+              SecureStore.deleteItemAsync(TOKEN_KEY),
+              SecureStore.deleteItemAsync(USER_KEY),
+            ]);
+            setUser(null);
+            return;
+          }
+        } catch {
+          // Sin red al arrancar — restaurar sesión igual, el servidor
+          // rechazará las peticiones cuando corresponda
+        }
+
           setUser({ ...savedUser, token });
         }
       } catch {
@@ -72,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Fallback fetch directo
-    const response = await fetch("https://187.33.154.112.sslip.io/backend/logueo/auth/login", {
+    const response = await fetch(`${API_BASE}/logueo/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ documento, password }),

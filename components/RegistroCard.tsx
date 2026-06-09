@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, Clipboard, ToastAndroid, Platform, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import type { Registro } from "@/app/search";
 
@@ -19,6 +19,17 @@ export default function RegistroCard({ registro, onEnviarLink }: Props) {
     label: registro.tipo_acta,
     bg: "#F3F4F6",
     text: "#374151",
+  };
+
+  const actaUrl = `http://187.33.154.112.sslip.io/backend/acta.html?id=${registro.carpeta}`;
+
+  const handleCopiarUrl = () => {
+    Clipboard.setString(actaUrl);
+    if (Platform.OS === "android") {
+      ToastAndroid.show("URL copiada", ToastAndroid.SHORT);
+    } else {
+      Alert.alert("Copiado", "URL del informe copiada al portapapeles");
+    }
   };
 
   return (
@@ -57,16 +68,32 @@ export default function RegistroCard({ registro, onEnviarLink }: Props) {
             {registro.carpeta}
           </Text>
         </View>
-        <Pressable
-          style={({ pressed }) => [
-            styles.enviarBtn,
-            pressed && { opacity: 0.8 },
-          ]}
-          onPress={onEnviarLink}
-        >
-          <Feather name="send" size={12} color="#fff" />
-          <Text style={styles.enviarText}>Enviar link</Text>
-        </Pressable>
+
+        <View style={styles.botonesWrap}>
+          {/* Botón copiar URL */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.copiarBtn,
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={handleCopiarUrl}
+          >
+            <Feather name="copy" size={12} color="#1a3a6b" />
+            <Text style={styles.copiarText}>Copiar URL</Text>
+          </Pressable>
+
+          {/* Botón detalles */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.enviarBtn,
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={onEnviarLink}
+          >
+            <Feather name="send" size={12} color="#fff" />
+            <Text style={styles.enviarText}>Detalles</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -139,6 +166,26 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: "#9CA3AF",
     flexShrink: 1,
+  },
+  botonesWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  copiarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "#1a3a6b",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  copiarText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: "#1a3a6b",
   },
   enviarBtn: {
     flexDirection: "row",

@@ -3,6 +3,7 @@
   "compilerOptions": {
     // "baseUrl": ".",
     "strict": true,
+    "jsx": "react-jsx",
     "paths": {
       "@/*": [
         "./*"
@@ -17,5 +18,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-, "services/FtpuploadServices.js", "store/zustand-state.jsx"  ]
+, "services/FtpuploadServices.js", "store/zustand-state.jsx", "components/MapPicker.native.tsx"  ]
 }

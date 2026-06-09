@@ -11,18 +11,39 @@ import {
   TextInput,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
+import WatermarkProcessor from "./WatermarkProcessor";
+
+
+// ✅ FIX 1: Eliminado expo-media-library por completo.
+//    No se necesita — expo-image-picker gestiona sus propios permisos
+//    y NO pide WRITE_EXTERNAL_STORAGE ni el diálogo de "modificar foto".
 
 const C = Colors.light;
-// const MAX_PHOTOS = 6;  ← Eliminado
 
 interface Props {
   photos: { uri: string; descripcion: string }[];
   onPhotosChange: (photos: { uri: string; descripcion: string }[]) => void;
   showDescription?: boolean;
-  maxPhotos?: number; // ← Ahora es opcional (si no lo pasas = sin límite)
+  maxPhotos?: number;
+}
+
+// ✅ FIX 2: Antes de exponer el URI al resto de la app (y al FTPClient),
+//    copiamos cada foto al directorio cache de la app.
+//    Esto evita que expo-file-system acceda directamente al MediaStore
+//    (content://media/...) y dispare el permiso "modificar foto" en Android 13+.
+async function copiarAlCache(uri: string): Promise<string> {
+  if (!uri.startsWith("content://")) return uri; // file:// o remota: no hace falta
+
+  const ext      = uri.split(".").pop()?.split("?")[0] ?? "jpg";
+  const nombre   = `photo_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const destino  = `${FileSystem.cacheDirectory}${nombre}`;
+
+  await FileSystem.copyAsync({ from: uri, to: destino });
+  return destino; // file:// — expo-file-system y FTPClient lo leen sin permisos extra
 }
 
 export default function PhotoPickerSection({
@@ -31,11 +52,40 @@ export default function PhotoPickerSection({
   showDescription = false,
   maxPhotos,
 }: Props) {
-  const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
-  const [mediaPermission, requestMediaPermission] = ImagePicker.useMediaLibraryPermissions();
+  const [cameraPermission, requestCameraPermission] =
+    ImagePicker.useCameraPermissions();
+  const [mediaPermission, requestMediaPermission] =
+    ImagePicker.useMediaLibraryPermissions();
 
-  const hasLimit = maxPhotos !== undefined;
+  // ✅ Sin useEffect — no pedimos nada al montar el componente.
+  //    Los permisos se piden solo cuando el usuario toca "Cámara" o "Galería".
+
+  const hasLimit    = maxPhotos !== undefined;
   const currentCount = photos.length;
+
+
+// Al inicio del componente, agrega:
+const [pendingUris, setPendingUris] = React.useState<string[]>([]);
+const LOGO = require("../media/logo.png"); // ← ajusta tu ruta
+const COMPANY = "Mi Empresa S.A.";                 // ← tu nombre
+const photosRef = React.useRef(photos);
+React.useEffect(() => { photosRef.current = photos; }, [photos]);
+
+// Reemplaza copiarAlCache por este helper que encola el URI:
+const procesarFoto = (uri: string) => {
+  setPendingUris((prev) => [...prev, uri]);
+};
+
+// Callback cuando WatermarkProcessor termina:
+const onWatermarkDone = async (processedUri: string, originalUri: string) => {
+  if (originalUri.startsWith(FileSystem.cacheDirectory ?? "__")) {
+    await FileSystem.deleteAsync(originalUri, { idempotent: true }).catch(() => {});
+  }
+  // ✅ Usa el ref para leer el valor más reciente sin cambiar el tipo del prop
+  onPhotosChange([...photosRef.current, { uri: processedUri, descripcion: "" }]);
+  setPendingUris((prev) => prev.filter((u) => u !== originalUri));
+  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+};
 
   const updateDescripcion = (index: number, texto: string) => {
     const updated = photos.map((p, i) =>
@@ -45,6 +95,11 @@ export default function PhotoPickerSection({
   };
 
   const removePhoto = async (index: number) => {
+    const foto = photos[index];
+    // Limpiar del cache si fue copiada ahí
+    if (foto.uri.startsWith(FileSystem.cacheDirectory ?? "__")) {
+      await FileSystem.deleteAsync(foto.uri, { idempotent: true }).catch(() => {});
+    }
     onPhotosChange(photos.filter((_, i) => i !== index));
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -66,15 +121,17 @@ export default function PhotoPickerSection({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
-      selectionLimit: hasLimit ? maxPhotos! - currentCount : undefined, // sin límite si no se pasa
+      selectionLimit: hasLimit ? maxPhotos! - currentCount : undefined,
       quality: 0.7,
     });
 
     if (!result.canceled) {
-      const nuevas = result.assets.map((a) => ({ uri: a.uri, descripcion: "" }));
-      onPhotosChange([...photos, ...nuevas]);
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+  const cacheUris = await Promise.all(
+    result.assets.map((a) => copiarAlCache(a.uri))
+  );
+  cacheUris.forEach((uri) => procesarFoto(uri)); // ← encola en WatermarkProcessor
+  // ⚠️ NO llames onPhotosChange aquí — lo hace onWatermarkDone
+}
   };
 
   const pickFromCamera = async () => {
@@ -93,12 +150,13 @@ export default function PhotoPickerSection({
 
     const result = await ImagePicker.launchCameraAsync({
       quality: 0.7,
-      allowsEditing: true,
+      allowsEditing: false,
     });
 
     if (!result.canceled) {
-      onPhotosChange([...photos, { uri: result.assets[0].uri, descripcion: "" }]);
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const uri = await copiarAlCache(result.assets[0].uri);
+  procesarFoto(uri); // ← encola
+  // ⚠️ NO llames onPhotosChange aquí
     }
   };
 
@@ -108,9 +166,9 @@ export default function PhotoPickerSection({
       return;
     }
     Alert.alert("Agregar foto", "Selecciona el origen", [
-      { text: "Cámara", onPress: pickFromCamera },
-      { text: "Galería", onPress: pickFromGallery },
-      { text: "Cancelar", style: "cancel" },
+      { text: "Cámara",   onPress: pickFromCamera  },
+      { text: "Galería",  onPress: pickFromGallery },
+      { text: "Cancelar", style: "cancel"          },
     ]);
   };
 
@@ -126,9 +184,7 @@ export default function PhotoPickerSection({
             <Feather name="camera" size={26} color={C.primary} />
           </View>
           <Text style={styles.emptyTitle}>Sin fotos</Text>
-          <Text style={styles.emptySubtitle}>
-            Toca para agregar fotos
-          </Text>
+          <Text style={styles.emptySubtitle}>Toca para agregar fotos</Text>
           <View style={styles.emptyActions}>
             <View style={styles.emptyChip}>
               <Feather name="camera" size={12} color={C.primary} />
@@ -146,8 +202,16 @@ export default function PhotoPickerSection({
           {photos.map((foto, index) => (
             <View key={index} style={styles.photoRow}>
               <View style={styles.thumbWrapper}>
-                <Image source={{ uri: foto.uri }} style={styles.thumb} resizeMode="cover" />
-                <Pressable style={styles.removeBtn} onPress={() => removePhoto(index)} hitSlop={6}>
+                <Image
+                  source={{ uri: foto.uri }}
+                  style={styles.thumb}
+                  resizeMode="cover"
+                />
+                <Pressable
+                  style={styles.removeBtn}
+                  onPress={() => removePhoto(index)}
+                  hitSlop={6}
+                >
                   <Feather name="x" size={11} color="#fff" />
                 </Pressable>
                 <View style={styles.thumbBadge}>
@@ -175,8 +239,16 @@ export default function PhotoPickerSection({
         <View style={styles.grid}>
           {photos.map((foto, index) => (
             <View key={index} style={styles.gridPhotoWrapper}>
-              <Image source={{ uri: foto.uri }} style={styles.gridPhoto} resizeMode="cover" />
-              <Pressable style={styles.gridRemoveBtn} onPress={() => removePhoto(index)} hitSlop={4}>
+              <Image
+                source={{ uri: foto.uri }}
+                style={styles.gridPhoto}
+                resizeMode="cover"
+              />
+              <Pressable
+                style={styles.gridRemoveBtn}
+                onPress={() => removePhoto(index)}
+                hitSlop={4}
+              >
                 <Feather name="x" size={12} color="#fff" />
               </Pressable>
             </View>
@@ -204,25 +276,36 @@ export default function PhotoPickerSection({
           </Text>
         </Pressable>
       )}
+
+
+      {/* Procesador invisible — uno por cada foto pendiente */}
+{pendingUris.map((uri) => (
+  <WatermarkProcessor
+    key={uri}
+    photoUri={uri}
+    companyName={COMPANY}
+    logoUri={LOGO}
+    onCapture={(processed) => onWatermarkDone(processed, uri)}
+  />
+))}
     </View>
   );
 }
 
 /* ====================== STYLES ====================== */
-const THUMB = 80;
+const THUMB     = 80;
 const TILE_SIZE = 100;
 
 const styles = StyleSheet.create({
   container: { gap: 12 },
 
-  /* Modo Lista */
   photoRow: {
     flexDirection: "row", gap: 12, alignItems: "flex-start",
     backgroundColor: C.inputBg, borderRadius: 12,
     borderWidth: 1.5, borderColor: C.border, padding: 10,
   },
   thumbWrapper: { position: "relative", width: THUMB, height: THUMB, flexShrink: 0 },
-  thumb: { width: THUMB, height: THUMB, borderRadius: 8 },
+  thumb:        { width: THUMB, height: THUMB, borderRadius: 8 },
   removeBtn: {
     position: "absolute", top: -6, right: -6,
     width: 20, height: 20, borderRadius: 10,
@@ -249,13 +332,12 @@ const styles = StyleSheet.create({
     minHeight: 56, textAlignVertical: "top",
   },
 
-  /* Modo Grid */
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   gridPhotoWrapper: {
     width: TILE_SIZE, height: TILE_SIZE,
     borderRadius: 10, overflow: "hidden", position: "relative",
   },
-  gridPhoto: { width: TILE_SIZE, height: TILE_SIZE },
+  gridPhoto:     { width: TILE_SIZE, height: TILE_SIZE },
   gridRemoveBtn: {
     position: "absolute", top: 4, right: 4,
     width: 22, height: 22, borderRadius: 11,
@@ -270,7 +352,6 @@ const styles = StyleSheet.create({
   },
   addTileText: { fontSize: 11, fontFamily: "Inter_500Medium", color: C.primary },
 
-  /* Compartidos */
   emptyBtn: {
     alignItems: "center", gap: 8, paddingVertical: 20,
     backgroundColor: "#EFF3F8", borderRadius: 14,
@@ -280,9 +361,12 @@ const styles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 14,
     backgroundColor: "#fff", justifyContent: "center", alignItems: "center",
   },
-  emptyTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
-  emptySubtitle: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, textAlign: "center", paddingHorizontal: 20 },
-  emptyActions: { flexDirection: "row", gap: 8, marginTop: 4 },
+  emptyTitle:    { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
+  emptySubtitle: {
+    fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, textAlign: "center", paddingHorizontal: 20,
+  },
+  emptyActions:  { flexDirection: "row", gap: 8, marginTop: 4 },
   emptyChip: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "#fff", paddingHorizontal: 10, paddingVertical: 5,

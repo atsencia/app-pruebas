@@ -1,12 +1,7 @@
 // services/queueWorker.js
-// Worker con: hasta 10 actas en paralelo, reintentos por timeout/peso,
-// expo-background-fetch para carga con app en background/cerrada.
-
-import * as Network         from 'expo-network';
-import * as MediaLibrary    from 'expo-media-library';
-import * as FileSystem      from 'expo-file-system/legacy';
-import * as BackgroundFetch from 'expo-background-fetch';
-import * as TaskManager     from 'expo-task-manager';
+import * as Network      from 'expo-network';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem   from 'expo-file-system/legacy';
 
 import {
   leerCola,
@@ -16,15 +11,29 @@ import {
 } from './uploadQueue';
 import { subirFormularioFTP } from './FtpuploadServices';
 
-// ── Configuración ────────────────────────────────────────────
-const TAREA_BG          = 'FTP_QUEUE_BG_TASK';
-const INTERVALO_MS      = 8_000;   // polling foreground cada 8s
-const MAX_PARALELOS     = 10;      // máximo de actas simultáneas
-const BYTES_ARCHIVO_MAX = 50 * 1024 * 1024; // >50 MB → timeout extendido
+// ── Imports opcionales (no disponibles en Expo Go / web) ─────
+let BackgroundFetch = null;
+let TaskManager     = null;
+try {
+  BackgroundFetch = require('expo-background-fetch');
+  TaskManager     = require('expo-task-manager');
+} catch (e) {
+  console.warn('[QueueWorker] Background fetch no disponible en este entorno');
+}
 
-let _timer      = null;
-let _enProceso  = new Set(); // ids actualmente subiendo
-let _listeners  = [];
+// ── Configuración ────────────────────────────────────────────
+const TAREA_BG      = 'FTP_QUEUE_BG_TASK';
+const INTERVALO_MS  = 8_000;
+
+// ✅ Reducido a 2 subidas paralelas.
+// Con 10 paralelos y archivos de 30-100 MB cada uno, el ancho de banda
+// se divide entre todos y ninguno termina a tiempo.
+// Con 2, cada subida tiene banda suficiente para completar.
+const MAX_PARALELOS = 2;
+
+let _timer     = null;
+let _enProceso = new Set();
+let _listeners = [];
 
 // ── Suscripción para la UI ───────────────────────────────────
 export function suscribir(fn) {
@@ -48,11 +57,10 @@ async function hayConexion() {
   } catch { return false; }
 }
 
-// ── Guardar fotos en álbum del dispositivo ───────────────────
-// Se llama ANTES de subir — el técnico siempre conserva copia local
+// ── Guardar fotos en álbum ───────────────────────────────────
 async function guardarEnAlbum(formulario) {
   try {
-    const { status } = await MediaLibrary.requestPermissionsAsync();
+    const { status } = await MediaLibrary.getPermissionsAsync();
     if (status !== 'granted') return;
 
     const nombreAlbum = `Acta - ${
@@ -72,14 +80,14 @@ async function guardarEnAlbum(formulario) {
       try {
         const asset = await MediaLibrary.createAssetAsync(uri);
         await MediaLibrary.createAlbumAsync(nombreAlbum, asset, false);
-      } catch { /* ya existe en el álbum */ }
+      } catch { /* ya existe */ }
     }
   } catch (e) {
     console.warn('[QueueWorker] guardarEnAlbum:', e.message);
   }
 }
 
-// ── Borrar archivos locales originales tras éxito ────────────
+// ── Borrar archivos locales tras éxito ───────────────────────
 async function borrarArchivosLocales(formulario) {
   const uris = [
     ...(formulario.fotos        || []).map(f => f.uri ?? f),
@@ -92,46 +100,37 @@ async function borrarArchivosLocales(formulario) {
   }
 }
 
-// ── Calcular timeout según peso total estimado ───────────────
-// Si algún archivo es muy pesado, le damos más margen antes de reintentar
-function timeoutParaFormulario(formulario) {
-  const archivos = [
-    ...(formulario.fotos        || []),
-    ...(formulario.fotosFachada || []),
-    ...(formulario.videos       || []),
-  ];
-  const pesoEstimado = archivos.length * 5 * 1024 * 1024; // estimado ~5 MB por archivo
-  // >50 MB → 8 min | >20 MB → 5 min | resto → 3 min
-  if (pesoEstimado > BYTES_ARCHIVO_MAX) return 8 * 60_000;
-  if (pesoEstimado > 20 * 1024 * 1024) return 5 * 60_000;
-  return 3 * 60_000;
-}
-
-// ── Procesar un ítem individual ──────────────────────────────
+// ── Procesar un ítem ─────────────────────────────────────────
 async function procesarItem(item) {
-  if (_enProceso.has(item.id)) return; // ya está subiendo
+  if (_enProceso.has(item.id)) return;
   _enProceso.add(item.id);
 
   await actualizarEstado(item.id, ESTADO.SUBIENDO);
   notificar({ tipo: 'inicio', id: item.id });
 
-  const timeout = timeoutParaFormulario(item.formulario);
-
-  // Race: subida vs timeout generoso por peso
-  const promesaSubida = (async () => {
-    await guardarEnAlbum(item.formulario);
-    return await subirFormularioFTP(
-      item.formulario,
-      (pct, msg) => notificar({ tipo: 'progreso', id: item.id, pct, msg })
-    );
-  })();
-
-  const promesaTimeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error(`Timeout: el archivo es muy pesado o la conexión es lenta (${timeout / 60000} min)`)), timeout)
-  );
-
   try {
-    const resultado = await Promise.race([promesaSubida, promesaTimeout]);
+    // ✅ Sin Promise.race ni timeout arbitrario.
+    //
+    // Antes: un timeout de 3-8 min mataba la subida aunque el FTPClient
+    //        estuviera funcionando bien. Con videos pesados por red móvil
+    //        eso era insuficiente y lanzaba el error 226 falso.
+    //
+    // Ahora: la subida corre sin límite de tiempo desde el worker.
+    //        El único control de tiempo está en FTPClient.js donde
+    //        TIMEOUT_TRANSFER = 300_000 ms (5 min) por archivo individual,
+    //        que es el lugar correcto para manejarlo.
+    //
+    // Si la red cae, el FTPClient lanzará su propio error de socket/timeout
+    // y llegará aquí como catch normal — sin matar subidas válidas.
+
+    await guardarEnAlbum(item.formulario);
+
+    const resultado = await subirFormularioFTP(
+      item.formulario,
+      (pct, msg) => notificar({ tipo: 'progreso', id: item.id, pct, msg }),
+      item.token  // ← agregar acá
+    );
+
     if (!resultado.success) throw new Error(resultado.mensaje);
 
     await actualizarEstado(item.id, ESTADO.COMPLETADO, {
@@ -143,8 +142,11 @@ async function procesarItem(item) {
   } catch (error) {
     console.error('[QueueWorker] Error en item', item.id, ':', error.message);
 
-    // Si fue timeout de conexión (no de peso), volver a PENDIENTE inmediatamente
-    const esTimeout = error.message.toLowerCase().includes('timeout');
+    const esSinConexion = error.message.toLowerCase().includes('timeout') ||
+                          error.message.toLowerCase().includes('network') ||
+                          error.message.toLowerCase().includes('conexión') ||
+                          error.message.toLowerCase().includes('socket');
+
     const actualizado = await incrementarReintentos(item.id, error.message);
 
     notificar({
@@ -153,11 +155,10 @@ async function procesarItem(item) {
       mensaje:    error.message,
       reintentos: actualizado?.reintentos ?? 0,
       definitivo: actualizado?.estado === ESTADO.ERROR,
-      esTimeout,
+      esTimeout:  esSinConexion,
     });
 
-    // Si fue timeout de conexión, verificar red y marcar pendiente para reintentar pronto
-    if (esTimeout) {
+    if (esSinConexion) {
       const sigue = await hayConexion();
       if (!sigue) notificar({ tipo: 'sin_conexion' });
     }
@@ -167,7 +168,7 @@ async function procesarItem(item) {
   }
 }
 
-// ── Ciclo principal (procesa hasta MAX_PARALELOS a la vez) ───
+// ── Ciclo principal ──────────────────────────────────────────
 async function tick() {
   const conexion = await hayConexion();
   if (!conexion) {
@@ -179,53 +180,50 @@ async function tick() {
   const pendientes = cola.filter(
     i => i.estado === ESTADO.PENDIENTE && !_enProceso.has(i.id)
   );
-
   if (pendientes.length === 0) return;
 
-  // Lanzar en paralelo respetando el límite
   const slots = MAX_PARALELOS - _enProceso.size;
   if (slots <= 0) return;
 
-  const lote = pendientes.slice(0, slots);
-  // No await — se lanzan en paralelo, cada una gestiona su propio estado
-  lote.forEach(item => procesarItem(item));
+  pendientes.slice(0, slots).forEach(item => procesarItem(item));
 }
 
-// ── Background Task (app cerrada / en background) ────────────
-TaskManager.defineTask(TAREA_BG, async () => {
+// ── Registrar tarea background ───────────────────────────────
+if (TaskManager) {
   try {
-    await tick();
-    return BackgroundFetch.BackgroundFetchResult.NewData;
-  } catch {
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    TaskManager.defineTask(TAREA_BG, async () => {
+      try {
+        await tick();
+        return BackgroundFetch.BackgroundFetchResult.NewData;
+      } catch {
+        return BackgroundFetch.BackgroundFetchResult.Failed;
+      }
+    });
+  } catch (e) {
+    console.warn('[QueueWorker] defineTask falló:', e.message);
   }
-});
+}
 
 // ── API pública ──────────────────────────────────────────────
 export async function iniciarWorker() {
-  if (_timer) return; // ya corriendo
+  if (_timer) return;
 
-  // 1. Registrar tarea de background
-  // ── Background Task ──────────────────────────────────────────
-// defineTask DEBE llamarse antes de registerTaskAsync, pero fuera de async
-// Lo envolvemos en un try/catch por si TaskManager no está disponible
-try {
-  TaskManager.defineTask(TAREA_BG, async () => {
+  if (BackgroundFetch && TaskManager) {
     try {
-      await tick();
-      return BackgroundFetch.BackgroundFetchResult.NewData;
-    } catch {
-      return BackgroundFetch.BackgroundFetchResult.Failed;
+      await BackgroundFetch.registerTaskAsync(TAREA_BG, {
+        minimumInterval: 15,
+        stopOnTerminate:  false,
+        startOnBoot:      true,
+      });
+      console.log('[QueueWorker] Background fetch registrado');
+    } catch (e) {
+      console.warn('[QueueWorker] registerTaskAsync:', e.message);
     }
-  });
-} catch (e) {
-  console.warn('[QueueWorker] TaskManager no disponible:', e.message);
-}
+  }
 
-  // 2. Polling en foreground
   console.log('[QueueWorker] Iniciado (foreground)');
   _timer = setInterval(tick, INTERVALO_MS);
-  tick(); // ejecutar inmediatamente
+  tick();
 }
 
 export function detenerWorker() {
