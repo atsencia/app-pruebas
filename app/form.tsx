@@ -288,9 +288,9 @@ function FirmaSection({ icon, title, signed, children }: FirmaSectionProps) {
 
 export default function FormScreen() {
   const { agregarALaCola } = useUploadQueue();
-  const form      = useFormStore((state) => state.formData);
-  const setField  = useFormStore((state) => state.setField);
-  const clearForm = useFormStore((state) => state.clearForm);
+  const form      = useFormStore((state: any) => state.formData);
+  const setField  = useFormStore((state: any) => state.setField);
+  const clearForm = useFormStore((state: any) => state.clearForm);
 
   const { registro_uuid } = useLocalSearchParams<{ registro_uuid?: string }>();
   const isEditing = !!registro_uuid;
