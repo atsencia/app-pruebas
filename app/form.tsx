@@ -18,7 +18,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/contexts/AuthContext";
 import SignaturePad from "@/components/SignaturePad";
-// import MapPicker from "@/components/MapPicker";
+import MapPicker from "@/components/MapPicker";
 import PhotoPickerSection from "@/components/PhotoPickerSection";
 import VideoPickerSection from "@/components/VideoPickerSection";
 import ToggleField from "@/components/ToggleField";
@@ -843,8 +843,8 @@ export default function FormScreen() {
             <View style={styles.fachadaSubIconBg}><Feather name="map-pin" size={12} color={C.primary} /></View>
             <Text style={styles.fachadaSubTitle}>Georeferenciación</Text>
           </View>
-          {/* <MapPicker latitud={form.latitud} longitud={form.longitud}
-            onLocationChange={(lat, lng) => { setField("latitud", lat); setField("longitud", lng); }} /> */}
+          <MapPicker latitud={form.latitud} longitud={form.longitud}
+            onLocationChange={(lat, lng) => { setField("latitud", lat); setField("longitud", lng); }} />
           <View style={styles.fachadaDivider} />
           <View style={styles.fachadaSubHeader}>
             <View style={styles.fachadaSubIconBg}><Feather name="grid" size={12} color={C.primary} /></View>
