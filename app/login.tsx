@@ -93,8 +93,8 @@ export default function LoginScreen() {
           <View style={styles.iconContainer}>
             <Feather name="home" size={36} color="#fff" />
           </View>
-          <Text style={styles.appName}>Registro Vecinal</Text>
-          <Text style={styles.subtitle}>Sistema de Registro de Vecinos</Text>
+          <Text style={styles.appName}>Actas de Vecindad</Text>
+          <Text style={styles.subtitle}>Creación Actas de Vecindad</Text>
         </View>
 
         <View style={styles.card}>
@@ -172,7 +172,7 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        <Text style={styles.version}>v1.0.0 — Sistema Municipal</Text>
+        <Text style={styles.version}>v2.2.3 — Sencia</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

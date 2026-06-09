@@ -9,75 +9,69 @@ import {
   ActivityIndicator,
   RefreshControl,
   StyleSheet,
+  Pressable,
+  Platform,
 } from "react-native";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/contexts/AuthContext";
+import Colors from "@/constants/colors";
+
+const C = Colors.light;
 
 interface Usuario {
-  id: number;
-  documento: string;
-  nombre: string | null;  // ← agrega nombre
-  is_admin: number;
-  active: number;
+  id:         number;
+  documento:  string;
+  nombre:     string | null;
+  is_admin:   number;
+  active:     number;
   deleted_at: string | null;
-  creado_en: string;
-}
-
-const C = {
-  primary: "#185FA5",
-  primaryLight: "#E6F1FB",
-  primaryBorder: "#B5D4F4",
-  background: "#F5F5F0",
-  surface: "#FFFFFF",
-  surfaceAlt: "#F1EFE8",
-  text: "#1A1A1A",
-  textSecondary: "#6B6A66",
-  textTertiary: "#9B9A96",
-  border: "#D3D1C7",
-  borderStrong: "#B4B2A9",
-  danger: "#FCEBEB",
-  dangerText: "#501313",
-  dangerBorder: "#F09595",
-};
-
-function getInitials(documento: string): string {
-  return documento.slice(-2).toUpperCase();
+  creado_en:  string;
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(dateStr).toLocaleDateString("es-CO", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
 }
 
 const API = "https://187.33.154.112.sslip.io/backend/api/users";
 
+// ─── Componente principal ─────────────────────────────────────────────────────
+
 export default function UsersManagementScreen() {
   const { user } = useAuth();
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [search, setSearch] = useState("");
-  const [loadingDelete, setLoadingDelete] = useState<number | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const insets   = useSafeAreaInsets();
 
-  // ── 1. Fetch al montar ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user?.isAdmin) router.replace("/form");
+  }, [user]);
+
+  const [usuarios,      setUsuarios]      = useState<Usuario[]>([]);
+  const [search,        setSearch]        = useState("");
+  const [loadingDelete, setLoadingDelete] = useState<number | null>(null);
+  const [refreshing,    setRefreshing]    = useState(false);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState<string | null>(null);
+
+  const topPadding = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
+
+  // ── Fetch ────────────────────────────────────────────────────────────────
+
   const fetchUsuarios = useCallback(async () => {
     try {
       setError(null);
       const response = await fetch(API, {
         method: "GET",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type":  "application/json",
           "Authorization": `Bearer ${user?.token}`,
         },
       });
-
       if (!response.ok) throw new Error("Error al obtener usuarios");
-
       const data = await response.json();
-      console.log("Usuarios obtenidos:", data);
-      // Ajusta según lo que devuelva el backend (array directo o { users: [] })
-    setUsuarios(Array.isArray(data) ? data : data.usuarios ?? []);
+      setUsuarios(Array.isArray(data) ? data : data.usuarios ?? []);
     } catch (e: any) {
       setError(e.message || "No se pudo conectar al servidor");
     } finally {
@@ -86,168 +80,205 @@ export default function UsersManagementScreen() {
     }
   }, [user?.token]);
 
-  useEffect(() => {
-    fetchUsuarios();
-  }, [fetchUsuarios]);
+  useEffect(() => { fetchUsuarios(); }, [fetchUsuarios]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchUsuarios();
-  };
+  const onRefresh = async () => { setRefreshing(true); await fetchUsuarios(); };
 
-  // ── 2. Solo activos (sin deleted_at) ───────────────────────────────────
+  // ── Filtrado ─────────────────────────────────────────────────────────────
+
   const filteredUsuarios = useMemo(() => {
+    const term = search.toLowerCase();
     return usuarios
-      .filter((u) => !u.deleted_at) // oculta eliminados
-      .filter((u) => {
-        const term = search.toLowerCase();
-        return u.documento.includes(term);
-      })
+      .filter((u) => !u.deleted_at)
+      .filter((u) => u.documento.includes(term) || (u.nombre ?? "").toLowerCase().includes(term))
       .sort((a, b) => new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime());
   }, [usuarios, search]);
 
-  const activeCount = filteredUsuarios.length;
+  // ── Delete ───────────────────────────────────────────────────────────────
 
-  // ── 3. Delete al backend ────────────────────────────────────────────────
-  const handleDelete = (user_item: Usuario) => {
+  const handleDelete = (item: Usuario) => {
     Alert.alert(
       "Eliminar usuario",
-      `¿Eliminar al usuario con documento ${user_item.documento}?`,
+      `¿Eliminar a ${item.nombre ?? item.documento}?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "¡Última confirmación!",
-              "¿Continuar con la eliminación?",
-              [
-                { text: "No, cancelar", style: "cancel" },
-                {
-                  text: "Sí, eliminar",
-                  style: "destructive",
-                  onPress: async () => {
-                    setLoadingDelete(user_item.id);
-                    try {
-                      const response = await fetch(`${API}/${user_item.id}`, {
-                        method: "DELETE",
-                        headers: {
-                          "Authorization": `Bearer ${user?.token}`,
-                        },
-                      });
-
-                      if (!response.ok) throw new Error("Error al eliminar");
-
-                      // Actualiza lista local marcando deleted_at
-                      setUsuarios((prev) =>
-                        prev.map((u) =>
-                          u.id === user_item.id
-                            ? { ...u, deleted_at: new Date().toISOString() }
-                            : u
-                        )
-                      );
-
-                      Alert.alert("Usuario eliminado", "El usuario fue eliminado correctamente.");
-                    } catch (e: any) {
-                      Alert.alert("Error", e.message || "No se pudo eliminar el usuario.");
-                    } finally {
-                      setLoadingDelete(null);
-                    }
-                  },
+          text: "Eliminar", style: "destructive",
+          onPress: () =>
+            Alert.alert("¿Estás seguro?", "Esta acción no se puede deshacer.", [
+              { text: "No, cancelar", style: "cancel" },
+              {
+                text: "Sí, eliminar", style: "destructive",
+                onPress: async () => {
+                  setLoadingDelete(item.id);
+                  try {
+                    const res = await fetch(`${API}/${item.id}`, {
+                      method: "DELETE",
+                      headers: { "Authorization": `Bearer ${user?.token}` },
+                    });
+                    if (!res.ok) throw new Error("Error al eliminar");
+                    setUsuarios((prev) =>
+                      prev.map((u) =>
+                        u.id === item.id ? { ...u, deleted_at: new Date().toISOString() } : u
+                      )
+                    );
+                    Alert.alert("Eliminado", "El usuario fue eliminado correctamente.");
+                  } catch (e: any) {
+                    Alert.alert("Error", e.message || "No se pudo eliminar el usuario.");
+                  } finally {
+                    setLoadingDelete(null);
+                  }
                 },
-              ]
-            );
-          },
+              },
+            ]),
         },
       ]
     );
   };
 
-  const renderUser = ({ item }: { item: Usuario }) => (
-  <View style={styles.userCard}>
-    <View style={styles.avatarCircle}>
-      <Text style={styles.avatarText}>
-        {item.nombre ? item.nombre.charAt(0).toUpperCase() : item.documento.slice(-2).toUpperCase()}
-      </Text>
-    </View>
+  // ── Render item ──────────────────────────────────────────────────────────
 
-    <View style={styles.userInfo}>
-      <Text style={styles.userName}>{item.nombre ?? item.documento}</Text>
-      <Text style={styles.userDoc}>{item.documento}</Text>
-      <View style={styles.badges}>
-        {item.active === 1 && (
-          <View style={styles.badgeActive}>
-            <Text style={styles.badgeTextActive}>Activo</Text>
+  const renderUser = ({ item }: { item: Usuario }) => {
+    const initial = item.nombre
+      ? item.nombre.charAt(0).toUpperCase()
+      : item.documento.slice(-1).toUpperCase();
+
+    return (
+      <View style={styles.userCard}>
+        {/* Avatar */}
+        <View style={[styles.avatar, item.is_admin === 1 && styles.avatarAdmin]}>
+          <Text style={[styles.avatarText, item.is_admin === 1 && styles.avatarTextAdmin]}>
+            {initial}
+          </Text>
+        </View>
+
+        {/* Info */}
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.nombre ?? item.documento}</Text>
+          {item.nombre && <Text style={styles.userDoc}>{item.documento}</Text>}
+          <View style={styles.badgeRow}>
+            {item.active === 1 && (
+              <View style={styles.badgeActive}>
+                <Feather name="check-circle" size={10} color="#2E7D32" />
+                <Text style={styles.badgeActiveText}>Activo</Text>
+              </View>
+            )}
+            {item.is_admin === 1 && (
+              <View style={styles.badgeAdmin}>
+                <Feather name="shield" size={10} color={C.primary} />
+                <Text style={styles.badgeAdminText}>Admin</Text>
+              </View>
+            )}
           </View>
-        )}
-        {item.is_admin === 1 && (
-          <View style={styles.badgeAdmin}>
-            <Text style={styles.badgeTextAdmin}>Admin</Text>
-          </View>
-        )}
+          <Text style={styles.userDate}>Creado {formatDate(item.creado_en)}</Text>
+        </View>
+
+        {/* Acción */}
+        <Pressable
+          style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.75 }]}
+          onPress={() => handleDelete(item)}
+          disabled={loadingDelete === item.id}
+        >
+          {loadingDelete === item.id ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Feather name="trash-2" size={15} color="#fff" />
+          )}
+        </Pressable>
       </View>
-      <Text style={styles.created}>Creado {formatDate(item.creado_en)}</Text>
-    </View>
+    );
+  };
 
-    <View style={styles.actions}>
-      <TouchableOpacity
-        style={styles.deleteBtn}
-        onPress={() => handleDelete(item)}
-        disabled={loadingDelete === item.id}
-      >
-        {loadingDelete === item.id ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.deleteText}>Eliminar</Text>
-        )}
-      </TouchableOpacity>
-    </View>
-  </View>
-);
+  // ── Loading / Error states ───────────────────────────────────────────────
 
   if (loading) {
     return (
-      <View style={[styles.root, { justifyContent: "center", alignItems: "center" }]}>
-        <ActivityIndicator color={C.primary} size="large" />
-        <Text style={{ color: C.textSecondary, marginTop: 12 }}>Cargando usuarios...</Text>
+      <View style={[styles.root, { backgroundColor: C.background }]}>
+        <View style={[styles.topBar, { paddingTop: topPadding + 10, backgroundColor: C.primary }]}>
+          <View style={styles.iconBtn} />
+          <View style={styles.topBarCenter}>
+            <Text style={styles.topBarTitle}>Gestión de usuarios</Text>
+          </View>
+          <View style={styles.iconBtn} />
+        </View>
+        <View style={styles.centered}>
+          <ActivityIndicator color={C.primary} size="large" />
+          <Text style={styles.centeredText}>Cargando usuarios...</Text>
+        </View>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={[styles.root, { justifyContent: "center", alignItems: "center", padding: 24 }]}>
-        <Text style={{ color: "#E24B4A", fontSize: 15, textAlign: "center" }}>{error}</Text>
-        <TouchableOpacity onPress={fetchUsuarios} style={{ marginTop: 16 }}>
-          <Text style={{ color: C.primary }}>Reintentar</Text>
-        </TouchableOpacity>
+      <View style={[styles.root, { backgroundColor: C.background }]}>
+        <View style={[styles.topBar, { paddingTop: topPadding + 10, backgroundColor: C.primary }]}>
+          <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={10}>
+            <Feather name="arrow-left" size={20} color="#fff" />
+          </Pressable>
+          <View style={styles.topBarCenter}>
+            <Text style={styles.topBarTitle}>Gestión de usuarios</Text>
+          </View>
+          <View style={styles.iconBtn} />
+        </View>
+        <View style={styles.centered}>
+          <Feather name="wifi-off" size={32} color={C.error} />
+          <Text style={[styles.centeredText, { color: C.error, marginTop: 12 }]}>{error}</Text>
+          <Pressable style={styles.retryBtn} onPress={fetchUsuarios}>
+            <Text style={styles.retryText}>Reintentar</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
+  // ── Vista principal ──────────────────────────────────────────────────────
+
   return (
-    <View style={styles.root}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backIcon}>‹</Text>
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.headerTitle}>Gestión de usuarios</Text>
-          <Text style={styles.headerSub}>{activeCount} usuarios activos</Text>
+    <View style={[styles.root, { backgroundColor: C.background }]}>
+
+      {/* TOP BAR */}
+      <View style={[styles.topBar, { paddingTop: topPadding + 10, backgroundColor: C.primary }]}>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+          hitSlop={10}
+        >
+          <Feather name="arrow-left" size={20} color="#fff" />
+        </Pressable>
+        <View style={styles.topBarCenter}>
+          <Text style={styles.topBarTitle}>Gestión de usuarios</Text>
+          <Text style={styles.topBarSub}>{filteredUsuarios.length} usuarios activos</Text>
+        </View>
+        <Pressable
+          onPress={() => router.push("/createUser")}
+          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+          hitSlop={10}
+        >
+          <Feather name="user-plus" size={18} color="#fff" />
+        </Pressable>
+      </View>
+
+      {/* BUSCADOR */}
+      <View style={styles.searchWrap}>
+        <View style={styles.searchBox}>
+          <Feather name="search" size={15} color={C.textSecondary} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar por nombre o documento..."
+            placeholderTextColor={C.textSecondary}
+            value={search}
+            onChangeText={setSearch}
+          />
+          {search.length > 0 && (
+            <Pressable onPress={() => setSearch("")} hitSlop={8}>
+              <Feather name="x" size={15} color={C.textSecondary} />
+            </Pressable>
+          )}
         </View>
       </View>
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar por documento..."
-          placeholderTextColor={C.textTertiary}
-          value={search}
-          onChangeText={setSearch}
-        />
-      </View>
-
+      {/* LISTA */}
       <FlatList
         data={filteredUsuarios}
         keyExtractor={(item) => item.id.toString()}
@@ -259,6 +290,7 @@ export default function UsersManagementScreen() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
+            <Feather name="users" size={32} color={C.border} />
             <Text style={styles.emptyText}>No se encontraron usuarios</Text>
           </View>
         }
@@ -267,54 +299,75 @@ export default function UsersManagementScreen() {
   );
 }
 
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.background },
-  header: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16,
-    backgroundColor: C.surface, borderBottomWidth: 0.5, borderBottomColor: C.border,
+  root: { flex: 1 },
+
+  topBar: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingBottom: 18, gap: 12,
   },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: C.surfaceAlt, borderWidth: 0.5, borderColor: C.border,
-    alignItems: "center", justifyContent: "center",
+  iconBtn: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    justifyContent: "center", alignItems: "center",
   },
-  backIcon: { fontSize: 24, color: C.text, lineHeight: 28, marginTop: -2 },
-  headerTitle: { fontSize: 17, fontWeight: "500", color: C.text },
-  headerSub: { fontSize: 12, color: C.textSecondary, marginTop: 1 },
-  searchContainer: { padding: 20, paddingBottom: 12 },
+  topBarCenter: { flex: 1 },
+  topBarTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.3 },
+  topBarSub:   { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 1 },
+
+  searchWrap: { paddingHorizontal: 16, paddingVertical: 12 },
+  searchBox:  {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: C.card, borderRadius: 14, borderWidth: 1.5,
+    borderColor: C.border, paddingHorizontal: 14, paddingVertical: 12,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 1, shadowRadius: 4, elevation: 2,
+  },
   searchInput: {
-    height: 46, borderRadius: 12, borderWidth: 0.5, borderColor: C.borderStrong,
-    backgroundColor: C.surfaceAlt, paddingHorizontal: 16, fontSize: 15, color: C.text,
+    flex: 1, fontSize: 14, fontFamily: "Inter_400Regular",
+    color: C.text, padding: 0,
   },
-  list: { padding: 20, paddingTop: 8 },
+
+  list: { padding: 16, paddingTop: 4, gap: 10 },
+
   userCard: {
-    flexDirection: "row", backgroundColor: C.surface, borderRadius: 12,
-    padding: 14, marginBottom: 12, borderWidth: 0.5, borderColor: C.border,
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: C.card, borderRadius: 16, padding: 14,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 6, elevation: 2,
   },
-  avatarCircle: {
-    width: 48, height: 48, borderRadius: 24, backgroundColor: C.primaryLight,
-    alignItems: "center", justifyContent: "center", marginRight: 12,
+
+  avatar: {
+    width: 44, height: 44, borderRadius: 13,
+    backgroundColor: C.primary + "18",
+    justifyContent: "center", alignItems: "center",
   },
-  avatarText: { fontSize: 18, fontWeight: "500", color: C.primary },
-  userInfo: { flex: 1 },
-  userName: { fontSize: 15, fontWeight: "500", color: C.text },
-  created: { fontSize: 11, color: C.textTertiary, marginTop: 6 },
-  badges: { flexDirection: "row", gap: 6, marginTop: 6 },
-  badgeActive: {
-    backgroundColor: "#EAF3DE", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
-  },
-  badgeTextActive: { fontSize: 11, color: "#27500A", fontWeight: "500" },
-  badgeAdmin: {
-    backgroundColor: C.primaryLight, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
-  },
-  badgeTextAdmin: { fontSize: 11, color: C.primary, fontWeight: "500" },
-  actions: { justifyContent: "center" },
+  avatarAdmin:     { backgroundColor: C.primary },
+  avatarText:      { fontSize: 17, fontFamily: "Inter_700Bold", color: C.primary },
+  avatarTextAdmin: { color: "#fff" },
+
+  userInfo: { flex: 1, gap: 3 },
+  userName: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
+  userDoc:  { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  userDate: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 4 },
+
+  badgeRow:        { flexDirection: "row", gap: 6, marginTop: 4 },
+  badgeActive:     { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#E6F4EA", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeActiveText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#2E7D32" },
+  badgeAdmin:      { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.primary + "15", borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeAdminText:  { fontSize: 11, fontFamily: "Inter_600SemiBold", color: C.primary },
+
   deleteBtn: {
-    backgroundColor: "#E24B4A", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: C.error, justifyContent: "center", alignItems: "center",
   },
-  deleteText: { color: "#fff", fontSize: 13, fontWeight: "500" },
-  empty: { paddingTop: 60, alignItems: "center" },
-  emptyText: { color: C.textTertiary, fontSize: 15 },
-  userDoc: { fontSize: 12, color: C.textSecondary, marginTop: 2 },
+
+  centered:     { flex: 1, justifyContent: "center", alignItems: "center", gap: 8 },
+  centeredText: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary },
+
+  retryBtn:  { marginTop: 12, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: C.primary + "15", borderRadius: 10 },
+  retryText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.primary },
+
+  empty:     { paddingTop: 60, alignItems: "center", gap: 12 },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary },
 });

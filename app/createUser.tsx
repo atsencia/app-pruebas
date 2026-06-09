@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,13 +11,19 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from "react-native";
 import { router } from "expo-router";
-
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/contexts/AuthContext";
+import Colors from "@/constants/colors";
+
+const C = Colors.light;
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type Rol = "inspector" | "admin" |  "";
+type Rol = "inspector" | "admin" | "";
 
 interface FormState {
   nombre: string;
@@ -26,7 +32,6 @@ interface FormState {
   password: string;
   password2: string;
   activo: boolean;
-  esAdmin: boolean;
 }
 
 interface FormErrors {
@@ -38,15 +43,6 @@ interface FormErrors {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getInitials(nombre: string): string {
-  const parts = nombre.trim().split(" ").filter(Boolean);
-  if (parts.length === 0) return "?";
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0].toUpperCase())
-    .join("");
-}
 
 function getPasswordStrength(password: string): {
   score: number;
@@ -61,10 +57,10 @@ function getPasswordStrength(password: string): {
 
   const map = [
     { label: "Ingresa una contraseña", color: C.border },
-    { label: "Muy débil", color: "#E24B4A" },
-    { label: "Débil", color: "#EF9F27" },
-    { label: "Aceptable", color: "#639922" },
-    { label: "Segura", color: C.primary },
+    { label: "Muy débil",              color: "#E24B4A" },
+    { label: "Débil",                  color: "#EF9F27" },
+    { label: "Aceptable",              color: "#639922" },
+    { label: "Segura",                 color: C.primary },
   ];
 
   return { score, ...map[score] };
@@ -72,191 +68,143 @@ function getPasswordStrength(password: string): {
 
 function validate(form: FormState): FormErrors {
   const errors: FormErrors = {};
-  if (form.nombre.trim().length < 3)
-    errors.nombre = "Ingresa el nombre completo";
-  if (form.documento.trim().length < 5)
-    errors.documento = "Documento inválido";
-  if (!form.rol) errors.rol = "Selecciona un rol";
-  if (form.password.length < 8)
-    errors.password = "Mínimo 8 caracteres";
-  if (form.password !== form.password2)
-    errors.password2 = "Las contraseñas no coinciden";
+  if (form.nombre.trim().length < 3)    errors.nombre    = "Ingresa el nombre completo";
+  if (form.documento.trim().length < 5) errors.documento = "Documento inválido";
+  if (!form.rol)                        errors.rol       = "Selecciona un rol";
+  if (form.password.length < 8)         errors.password  = "Mínimo 8 caracteres";
+  if (form.password !== form.password2) errors.password2 = "Las contraseñas no coinciden";
   return errors;
 }
 
-// ─── Paleta (espeja Colors.light de tu proyecto) ─────────────────────────────
-
-const C = {
-  primary: "#185FA5",
-  primaryLight: "#E6F1FB",
-  primaryBorder: "#B5D4F4",
-  background: "#F5F5F0",
-  surface: "#FFFFFF",
-  surfaceAlt: "#F1EFE8",
-  text: "#1A1A1A",
-  textSecondary: "#6B6A66",
-  textTertiary: "#9B9A96",
-  border: "#D3D1C7",
-  borderStrong: "#B4B2A9",
-  success: "#EAF3DE",
-  successText: "#27500A",
-  successBorder: "#97C459",
-  danger: "#FCEBEB",
-  dangerText: "#501313",
-  dangerBorder: "#F09595",
-};
-
-// ─── Opciones de rol ──────────────────────────────────────────────────────────
-
-const ROLES: { value: Rol; label: string }[] = [
-  { value: "inspector", label: "Inspector" },
-  { value: "admin", label: "Administrador" },
+const ROLES: { value: Rol; label: string; icon: any }[] = [
+  { value: "inspector", label: "Inspector",      icon: "user"   },
+  { value: "admin",     label: "Administrador",  icon: "shield" },
 ];
 
 // ─── Componente principal ─────────────────────────────────────────────────────
- export default function CreateUserScreen() {
-  const { user } = useAuth();
 
-   const [form, setForm] = useState<FormState>({
-    nombre: "",
+export default function CreateUserScreen() {
+  const { user } = useAuth();
+  const insets   = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (!user?.isAdmin) router.replace("/form");
+  }, [user]);
+
+  const [form, setForm] = useState<FormState>({
+    nombre:    "",
     documento: "",
-    rol: "",
-    password: "",
+    rol:       "",
+    password:  "",
     password2: "",
-    activo: true,
-    esAdmin: false,
+    activo:    true,
   });
 
-  const [touched, setTouched] = useState<Partial<Record<keyof FormState, boolean>>>({});
-  const [loading, setLoading] = useState(false);
+  const [touched,  setTouched]  = useState<Partial<Record<keyof FormState, boolean>>>({});
+  const [loading,  setLoading]  = useState(false);
+  const [showPwd,  setShowPwd]  = useState(false);
+  const [showPwd2, setShowPwd2] = useState(false);
 
-  const errors = validate(form);
+  const errors  = validate(form);
   const isValid = Object.keys(errors).length === 0;
-
   const strength = getPasswordStrength(form.password);
 
-  const set = useCallback(
-    <K extends keyof FormState>(key: K, value: FormState[K]) => {
-      setForm((prev) => ({ ...prev, [key]: value }));
-    },
-    []
-  );
+  const topPadding = Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top;
+
+  const set = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
   const touch = (key: keyof FormState) =>
     setTouched((prev) => ({ ...prev, [key]: true }));
 
-  // ── Simula llamada al backend ──────────────────────────────────────────────
-  // TODO: reemplazar por fetch real a POST /api/usuarios
   async function handleSubmit() {
-  setTouched({
-    nombre: true,
-    documento: true,
-    rol: true,
-    password: true,
-    password2: true,
-  });
+    setTouched({ nombre: true, documento: true, rol: true, password: true, password2: true });
+    if (!isValid) return;
 
-  if (!isValid) return;
+    setLoading(true);
+    try {
+      const response = await fetch("https://187.33.154.112.sslip.io/backend/api/users", {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${user?.token}`,
+        },
+        body: JSON.stringify({
+          nombre:    form.nombre.trim(),
+          documento: form.documento.trim(),
+          is_admin:  form.rol === "admin" ? 1 : 0,
+          password:  form.password,
+        }),
+      });
 
-  setLoading(true);
-  try {
-    const response = await fetch("https://187.33.154.112.sslip.io/backend/api/users", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${user?.token}`,
-      },
-      body: JSON.stringify({
-          nombre: form.nombre.trim(), 
-        documento: form.documento.trim(),
-        is_admin: form.rol === "admin" ? 1 : 0,
-        password: form.password,
-      }),
-    });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || "Error al crear el usuario");
+      }
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.message || "Error al crear el usuario");
+      Alert.alert(
+        "Usuario creado",
+        `${form.nombre} ya puede iniciar sesión en el sistema.`,
+        [{ text: "Aceptar", onPress: () => router.back() }]
+      );
+    } catch (e: any) {
+      Alert.alert("Error al crear usuario", e.message || "No se pudo conectar al servidor.", [{ text: "Entendido" }]);
+    } finally {
+      setLoading(false);
     }
-
-    Alert.alert(
-      "Usuario creado",
-      `${form.nombre} ya puede iniciar sesión en el sistema.`,
-      [{ text: "Aceptar", onPress: () => router.back() }]
-    );
-  } catch (e: any) {
-    Alert.alert(
-      "Error al crear usuario",
-      e.message || "No se pudo conectar al servidor.",
-      [{ text: "Entendido" }]
-    );
-  } finally {
-    setLoading(false);
   }
-}
 
-  const initials = getInitials(form.nombre);
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
-      style={styles.root}
+      style={[styles.root, { backgroundColor: C.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backIcon}>‹</Text>
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.headerTitle}>Crear usuario</Text>
-          <Text style={styles.headerSub}>Nuevo acceso al sistema</Text>
+      {/* TOP BAR */}
+      <View style={[styles.topBar, { paddingTop: topPadding + 10, backgroundColor: C.primary }]}>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+          hitSlop={10}
+        >
+          <Feather name="arrow-left" size={20} color="#fff" />
+        </Pressable>
+        <View style={styles.topBarCenter}>
+          <Text style={styles.topBarTitle}>Crear usuario</Text>
+          <Text style={styles.topBarSub}>Nuevo acceso al sistema</Text>
         </View>
+        <View style={styles.iconBtn} />
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Avatar ── */}
-        {/* <View style={styles.avatarArea}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{initials}</Text>
-            <View style={styles.avatarBadge}>
-              <Text style={styles.avatarBadgeIcon}>+</Text>
-            </View>
-          </View>
-          <Text style={styles.avatarHint}>Iniciales generadas automáticamente</Text>
-        </View> */}
 
-        {/* ── Sección: Identificación ── */}
-        <SectionLabel>Identificación</SectionLabel>
+        {/* ── IDENTIFICACIÓN ── */}
+        <Section icon="user" title="Identificación">
+          <InfoBox text="Datos de acceso del nuevo usuario al sistema." />
 
-        <Field
-          label="Nombre completo"
-          error={touched.nombre ? errors.nombre : undefined}
-        >
-          <TextInput
-            style={[styles.input, touched.nombre && errors.nombre ? styles.inputError : null]}
-            placeholder="Ej. Carlos Rodríguez"
-            placeholderTextColor={C.textTertiary}
-            value={form.nombre}
-            onChangeText={(v) => set("nombre", v)}
-            onBlur={() => touch("nombre")}
-            autoCapitalize="words"
-          />
-        </Field>
-
-        <View style={styles.row}>
-          <Field
-            label="N.º documento"
-            error={touched.documento ? errors.documento : undefined}
-            style={{ flex: 1 }}
-          >
+          <Field label="Nombre completo" error={touched.nombre ? errors.nombre : undefined}>
             <TextInput
-              style={[styles.input, touched.documento && errors.documento ? styles.inputError : null]}
+              style={[styles.input, touched.nombre && errors.nombre && styles.inputError]}
+              placeholder="Ej. Carlos Rodríguez"
+              placeholderTextColor={C.textSecondary}
+              value={form.nombre}
+              onChangeText={(v) => set("nombre", v)}
+              onBlur={() => touch("nombre")}
+              autoCapitalize="words"
+            />
+          </Field>
+
+          <Field label="N.º documento" error={touched.documento ? errors.documento : undefined}>
+            <TextInput
+              style={[styles.input, touched.documento && errors.documento && styles.inputError]}
               placeholder="Cédula"
-              placeholderTextColor={C.textTertiary}
+              placeholderTextColor={C.textSecondary}
               value={form.documento}
               onChangeText={(v) => set("documento", v)}
               onBlur={() => touch("documento")}
@@ -264,106 +212,113 @@ const ROLES: { value: Rol; label: string }[] = [
             />
           </Field>
 
-          <Field
-            label="Rol"
-            error={touched.rol ? errors.rol : undefined}
-            style={{ width: 140 }}
-          >
-            {/* Selector de rol como botones de opción */}
-            <RolSelector
-              value={form.rol}
-              options={ROLES}
-              hasError={!!(touched.rol && errors.rol)}
-              onChange={(v) => { set("rol", v); touch("rol"); }}
-            />
-          </Field>
-        </View>
-
-        {/* ── Sección: Seguridad ── */}
-        <SectionLabel>Seguridad</SectionLabel>
-
-        <Field
-          label="Contraseña"
-          error={touched.password ? errors.password : undefined}
-        >
-          <TextInput
-            style={[styles.input, touched.password && errors.password ? styles.inputError : null]}
-            placeholder="Mínimo 8 caracteres"
-            placeholderTextColor={C.textTertiary}
-            value={form.password}
-            onChangeText={(v) => set("password", v)}
-            onBlur={() => touch("password")}
-            secureTextEntry
-          />
-          {/* Barra de fortaleza */}
-          {form.password.length > 0 && (
-            <View style={styles.strengthRow}>
-              <View style={styles.strengthTrack}>
-                <View
-                  style={[
-                    styles.strengthFill,
-                    {
-                      width: `${strength.score * 25}%` as any,
-                      backgroundColor: strength.color,
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={[styles.strengthLabel, { color: strength.color }]}>
-                {strength.label}
-              </Text>
+          <Field label="Rol" error={touched.rol ? errors.rol : undefined}>
+            <View style={styles.rolRow}>
+              {ROLES.map((opt) => {
+                const active = form.rol === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    style={({ pressed }) => [
+                      styles.rolBtn,
+                      active && styles.rolBtnActive,
+                      pressed && { opacity: 0.8 },
+                    ]}
+                    onPress={() => { set("rol", opt.value); touch("rol"); }}
+                  >
+                    <Feather name={opt.icon} size={14} color={active ? "#fff" : C.textSecondary} />
+                    <Text style={[styles.rolBtnText, active && styles.rolBtnTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
-          )}
-        </Field>
+          </Field>
+        </Section>
 
-        <Field
-          label="Confirmar contraseña"
-          error={touched.password2 ? errors.password2 : undefined}
-        >
-          <TextInput
-            style={[styles.input, touched.password2 && errors.password2 ? styles.inputError : null]}
-            placeholder="Repite la contraseña"
-            placeholderTextColor={C.textTertiary}
-            value={form.password2}
-            onChangeText={(v) => set("password2", v)}
-            onBlur={() => touch("password2")}
-            secureTextEntry
-          />
-        </Field>
+        {/* ── SEGURIDAD ── */}
+        <Section icon="lock" title="Seguridad">
+          <Field label="Contraseña" error={touched.password ? errors.password : undefined}>
+            <View style={styles.pwdRow}>
+              <TextInput
+                style={[styles.input, styles.pwdInput, touched.password && errors.password && styles.inputError]}
+                placeholder="Mínimo 8 caracteres"
+                placeholderTextColor={C.textSecondary}
+                value={form.password}
+                onChangeText={(v) => set("password", v)}
+                onBlur={() => touch("password")}
+                secureTextEntry={!showPwd}
+              />
+              <Pressable style={styles.pwdEye} onPress={() => setShowPwd(!showPwd)}>
+                <Feather name={showPwd ? "eye-off" : "eye"} size={16} color={C.textSecondary} />
+              </Pressable>
+            </View>
+            {form.password.length > 0 && (
+              <View style={styles.strengthRow}>
+                <View style={styles.strengthTrack}>
+                  <View style={[styles.strengthFill, { width: `${strength.score * 25}%` as any, backgroundColor: strength.color }]} />
+                </View>
+                <Text style={[styles.strengthLabel, { color: strength.color }]}>{strength.label}</Text>
+              </View>
+            )}
+          </Field>
 
-        {/* ── Sección: Permisos ── */}
-        <SectionLabel>Permisos</SectionLabel>
+          <Field label="Confirmar contraseña" error={touched.password2 ? errors.password2 : undefined}>
+            <View style={styles.pwdRow}>
+              <TextInput
+                style={[styles.input, styles.pwdInput, touched.password2 && errors.password2 && styles.inputError]}
+                placeholder="Repite la contraseña"
+                placeholderTextColor={C.textSecondary}
+                value={form.password2}
+                onChangeText={(v) => set("password2", v)}
+                onBlur={() => touch("password2")}
+                secureTextEntry={!showPwd2}
+              />
+              <Pressable style={styles.pwdEye} onPress={() => setShowPwd2(!showPwd2)}>
+                <Feather name={showPwd2 ? "eye-off" : "eye"} size={16} color={C.textSecondary} />
+              </Pressable>
+            </View>
+          </Field>
+        </Section>
 
-        <View style={styles.card}>
-          <ToggleRow
-            label="Usuario activo"
-            subtitle="Puede iniciar sesión"
-            value={form.activo}
-            onChange={(v) => set("activo", v)}
-            isLast={false}
-          />
-          {/* <ToggleRow
-            label="Administrador"
-            subtitle="Acceso completo al panel"
-            value={form.esAdmin}
-            onChange={(v) => set("esAdmin", v)}
-            isLast
-          /> */}
-        </View>
+        {/* ── PERMISOS ── */}
+        <Section icon="shield" title="Permisos">
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleTextWrap}>
+              <Text style={styles.toggleLabel}>Usuario activo</Text>
+              <Text style={styles.toggleSub}>Puede iniciar sesión desde el primer día</Text>
+            </View>
+            <Switch
+              value={form.activo}
+              onValueChange={(v) => set("activo", v)}
+              trackColor={{ false: C.border, true: C.primary }}
+              thumbColor="#fff"
+              ios_backgroundColor={C.border}
+            />
+          </View>
+        </Section>
 
-        {/* ── Botón ── */}
-        <TouchableOpacity
-          style={[styles.btn, (!isValid || loading) && styles.btnDisabled]}
+        {/* ── BOTÓN ── */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.submitBtn,
+            pressed && styles.submitBtnPressed,
+            (!isValid || loading) && styles.submitBtnDisabled,
+          ]}
           onPress={handleSubmit}
-          disabled={loading}
-          activeOpacity={0.85}
+          disabled={loading || !isValid}
         >
           {loading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text style={styles.btnText}>Crear usuario</Text>
+            <>
+              <Feather name="user-plus" size={18} color="#fff" />
+              <Text style={styles.submitText}>Crear usuario</Text>
+            </>
           )}
-        </TouchableOpacity>
+        </Pressable>
+
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -371,94 +326,40 @@ const ROLES: { value: Rol; label: string }[] = [
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
-function SectionLabel({ children }: { children: string }) {
-  return <Text style={styles.sectionLabel}>{children}</Text>;
-}
-
-function Field({
-  label,
-  error,
-  children,
-  style,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-  style?: object;
-}) {
+function Section({ icon, title, children }: { icon: any; title: string; children: React.ReactNode }) {
   return (
-    <View style={[styles.field, style]}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {children}
-      {error && <Text style={styles.fieldError}>{error}</Text>}
-    </View>
-  );
-}
-
-function RolSelector({
-  value,
-  options,
-  hasError,
-  onChange,
-}: {
-  value: Rol;
-  options: { value: Rol; label: string }[];
-  hasError: boolean;
-  onChange: (v: Rol) => void;
-}) {
-  return (
-    <View style={[styles.rolContainer, hasError && styles.inputError]}>
-      {options.map((opt) => (
-        <TouchableOpacity
-          key={opt.value}
-          style={[
-            styles.rolOption,
-            value === opt.value && styles.rolOptionActive,
-          ]}
-          onPress={() => onChange(opt.value)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.rolLabel,
-              value === opt.value && styles.rolLabelActive,
-            ]}
-            numberOfLines={1}
-          >
-            {opt.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
-
-function ToggleRow({
-  label,
-  subtitle,
-  value,
-  onChange,
-  isLast,
-}: {
-  label: string;
-  subtitle: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-  isLast: boolean;
-}) {
-  return (
-    <View style={[styles.toggleRow, !isLast && styles.toggleRowBorder]}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.toggleLabel}>{label}</Text>
-        <Text style={styles.toggleSub}>{subtitle}</Text>
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionIconBg}>
+          <Feather name={icon} size={14} color={C.primary} />
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
       </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: C.border, true: C.primary }}
-        thumbColor="#fff"
-        ios_backgroundColor={C.border}
-      />
+      <View style={styles.sectionBody}>{children}</View>
+    </View>
+  );
+}
+
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.fieldContainer}>
+      {label ? <Text style={styles.fieldLabel}>{label}</Text> : null}
+      {children}
+      {error && (
+        <View style={styles.fieldError}>
+          <Feather name="alert-circle" size={11} color={C.error} />
+          <Text style={styles.fieldErrorText}>{error}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function InfoBox({ text }: { text: string }) {
+  return (
+    <View style={styles.infoBox}>
+      <Feather name="info" size={13} color={C.primary} />
+      <Text style={styles.infoText}>{text}</Text>
     </View>
   );
 }
@@ -466,243 +367,98 @@ function ToggleRow({
 // ─── Estilos ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: C.background,
-  },
+  root: { flex: 1 },
 
-  // Header
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 16,
-    backgroundColor: C.surface,
-    borderBottomWidth: 0.5,
-    borderBottomColor: C.border,
+  topBar: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingBottom: 18, gap: 12,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.surfaceAlt,
-    borderWidth: 0.5,
-    borderColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
+  iconBtn: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    justifyContent: "center", alignItems: "center",
   },
-  backIcon: {
-    fontSize: 24,
-    color: C.text,
-    lineHeight: 28,
-    marginTop: -2,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: "500",
-    color: C.text,
-  },
-  headerSub: {
-    fontSize: 12,
-    color: C.textSecondary,
-    marginTop: 1,
-  },
+  topBarCenter: { flex: 1 },
+  topBarTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.3 },
+  topBarSub:   { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)", marginTop: 1 },
 
-  // Scroll
-  scroll: {
-    padding: 20,
-    paddingBottom: 40,
-  },
+  content: { padding: 16, gap: 14 },
 
-  // Avatar
-  avatarArea: {
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 24,
-    marginTop: 8,
+  section: {
+    backgroundColor: C.card, borderRadius: 20, overflow: "hidden",
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3,
   },
-  avatarCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: C.primaryLight,
-    borderWidth: 2,
-    borderColor: C.primaryBorder,
-    alignItems: "center",
-    justifyContent: "center",
+  sectionHeader: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 18, paddingVertical: 15,
+    borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.card,
   },
-  avatarText: {
-    fontSize: 26,
-    fontWeight: "500",
-    color: C.primary,
+  sectionIconBg: {
+    width: 30, height: 30, borderRadius: 9,
+    backgroundColor: C.primary + "15", justifyContent: "center", alignItems: "center",
   },
-  avatarBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: C.primary,
-    borderWidth: 2,
-    borderColor: C.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarBadgeIcon: {
-    color: "#fff",
-    fontSize: 14,
-    lineHeight: 16,
-    fontWeight: "500",
-  },
-  avatarHint: {
-    fontSize: 12,
-    color: C.textSecondary,
-  },
+  sectionTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.text, letterSpacing: -0.1 },
+  sectionBody:  { padding: 18, gap: 14 },
 
-  // Section label
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: C.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-
-  // Field
-  field: {
-    marginBottom: 14,
-  },
+  fieldContainer: { gap: 7 },
   fieldLabel: {
-    fontSize: 13,
-    color: C.textSecondary,
-    marginBottom: 5,
+    fontSize: 11, fontFamily: "Inter_600SemiBold", color: C.textSecondary,
+    textTransform: "uppercase", letterSpacing: 0.6,
   },
-  fieldError: {
-    fontSize: 11,
-    color: "#A32D2D",
-    marginTop: 4,
-  },
-
-  // Row layout
-  row: {
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  // Input
   input: {
-    height: 46,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: C.borderStrong,
-    backgroundColor: C.surfaceAlt,
-    paddingHorizontal: 12,
-    fontSize: 15,
-    color: C.text,
+    backgroundColor: C.inputBg, borderRadius: 13, borderWidth: 1.5, borderColor: C.border,
+    paddingHorizontal: 14, paddingVertical: 13,
+    fontSize: 15, fontFamily: "Inter_400Regular", color: C.text,
   },
-  inputError: {
-    borderColor: "#E24B4A",
-    borderWidth: 1,
+  inputError: { borderColor: C.error, backgroundColor: C.error + "0A" },
+  fieldError: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
+  fieldErrorText: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.error },
+
+  infoBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 9,
+    backgroundColor: C.primary + "0D", borderRadius: 11, padding: 12,
+    borderLeftWidth: 3, borderLeftColor: C.primary,
+  },
+  infoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
+
+  rolRow: { flexDirection: "row", gap: 10 },
+  rolBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7,
+    paddingVertical: 13, borderRadius: 13, borderWidth: 1.5,
+    borderColor: C.border, backgroundColor: C.inputBg,
+  },
+  rolBtnActive:     { backgroundColor: C.primary, borderColor: C.primary },
+  rolBtnText:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
+  rolBtnTextActive: { color: "#fff" },
+
+  pwdRow:  { position: "relative", justifyContent: "center" },
+  pwdInput: { paddingRight: 46 },
+  pwdEye:  {
+    position: "absolute", right: 14,
+    height: "100%", justifyContent: "center",
   },
 
-  // Password strength
-  strengthRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 6,
-  },
+  strengthRow:  { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
   strengthTrack: {
-    flex: 1,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: C.border,
-    overflow: "hidden",
+    flex: 1, height: 4, borderRadius: 2,
+    backgroundColor: C.border, overflow: "hidden",
   },
-  strengthFill: {
-    height: "100%",
-    borderRadius: 2,
-  },
-  strengthLabel: {
-    fontSize: 11,
-    minWidth: 70,
-    textAlign: "right",
-  },
+  strengthFill:  { height: "100%", borderRadius: 2 },
+  strengthLabel: { fontSize: 11, fontFamily: "Inter_500Medium", minWidth: 72, textAlign: "right" },
 
-  // Rol selector
-  rolContainer: {
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: C.borderStrong,
-    overflow: "hidden",
-  },
-  rolOption: {
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    backgroundColor: C.surfaceAlt,
-    borderBottomWidth: 0.5,
-    borderBottomColor: C.border,
-  },
-  rolOptionActive: {
-    backgroundColor: C.primaryLight,
-  },
-  rolLabel: {
-    fontSize: 13,
-    color: C.textSecondary,
-  },
-  rolLabelActive: {
-    color: C.primary,
-    fontWeight: "500",
-  },
-
-  // Card (permisos)
-  card: {
-    backgroundColor: C.surface,
-    borderRadius: 12,
-    borderWidth: 0.5,
-    borderColor: C.border,
-    marginBottom: 20,
-    overflow: "hidden",
-  },
   toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    flexDirection: "row", alignItems: "center", gap: 14,
   },
-  toggleRowBorder: {
-    borderBottomWidth: 0.5,
-    borderBottomColor: C.border,
-  },
-  toggleLabel: {
-    fontSize: 15,
-    color: C.text,
-  },
-  toggleSub: {
-    fontSize: 12,
-    color: C.textSecondary,
-    marginTop: 2,
-  },
+  toggleTextWrap: { flex: 1 },
+  toggleLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
+  toggleSub:   { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 2 },
 
-  // Botón
-  btn: {
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: C.primary,
-    alignItems: "center",
-    justifyContent: "center",
+  submitBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    backgroundColor: C.accent, borderRadius: 16, paddingVertical: 19, marginTop: 4,
+    shadowColor: C.accent, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
   },
-  btnDisabled: {
-    opacity: 0.45,
-  },
-  btnText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
+  submitBtnPressed:  { opacity: 0.85, transform: [{ scale: 0.985 }] },
+  submitBtnDisabled: { opacity: 0.5 },
+  submitText: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: -0.2 },
 });

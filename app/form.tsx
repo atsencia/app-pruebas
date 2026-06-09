@@ -304,6 +304,7 @@ export default function FormScreen() {
 
   const insets           = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const isAdmin = !!user?.isAdmin;  
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
       const { guardar } = useBorradoresActions();
@@ -1280,7 +1281,9 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
 </Pressable>
 
 {/* Resto de ítems */}
-{SIDEBAR_ITEMS.map((item) => (
+{SIDEBAR_ITEMS.filter(item =>
+  isAdmin || !(["/createUser", "/userManagement"].includes(item.route))
+).map((item) => (
   <Pressable
     key={item.route}
     style={({ pressed }) => [styles.sidebarItem, pressed && { opacity: 0.7 }]}
