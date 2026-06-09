@@ -24,10 +24,15 @@ import VideoPickerSection from "@/components/VideoPickerSection";
 import ToggleField from "@/components/ToggleField";
 import Colors from "@/constants/colors";
 import { useLocalSearchParams } from "expo-router";
-import { useFormStore } from '../store/zustand-state';
+import { useFormStore, useBorradores  } from '../store/zustand-state';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
 import QueueStatusBar from '@/components/QueueStatusBar';
 import ActasMovistar from '@/components/ActasMovistar';
+
+import { useBorradoresActions } from '../hooks/useBorradoresActions';
+import { usePredioTemplates } from '@/store/zustand-state';
+import GuardarBorradorModal from '@/components/GuardarBorradorModal';
+import TemplateSelector from '@/components/TemplateSelector';
 
 const C             = Colors.light;
 const SIDEBAR_WIDTH = 260;
@@ -288,10 +293,11 @@ function FirmaSection({ icon, title, signed, children }: FirmaSectionProps) {
 
 export default function FormScreen() {
   const { agregarALaCola } = useUploadQueue();
+  
   const form      = useFormStore((state: any) => state.formData);
   const setField  = useFormStore((state: any) => state.setField);
   const clearForm = useFormStore((state: any) => state.clearForm);
-
+  const totalBorradores = useBorradores((s: any) => s.borradores.filter((b: any) => b.estado === 'borrador').length);
   const { registro_uuid } = useLocalSearchParams<{ registro_uuid?: string }>();
   const isEditing = !!registro_uuid;
   const [loadingActa, setLoadingActa] = useState(false);
@@ -299,6 +305,13 @@ export default function FormScreen() {
   const insets           = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+      const { guardar } = useBorradoresActions();
+      const { crearDesdeForm } = usePredioTemplates();
+
+      const [modalBorradorVisible, setModalBorradorVisible]   = useState(false);
+      const [modalTemplateVisible, setModalTemplateVisible]   = useState(false);
+      const [borradorActivoId,     setBorradorActivoId]       = useState<string | null>(null);
 
   const handleActaSeleccionada = async (registro_uuid: string) => {
     try {
@@ -592,7 +605,22 @@ export default function FormScreen() {
   // ── Preguardado ─────────────────────────────
   const handlePreguardado = async () => {
     console.log("hola mundo");
+    setModalBorradorVisible(true);
   };
+const handleGuardarBorrador = (nombre: string) => {
+  const b = guardar(nombre, form, null, borradorActivoId as any);
+  setBorradorActivoId(b.id);
+  setModalBorradorVisible(false);
+};
+
+const handleGuardarComoTemplate = (nombre: string) => {
+  crearDesdeForm(nombre, form);
+  setModalTemplateVisible(false);
+};
+
+const handleAplicarTemplate = (campos: Record<string, any>) => {
+  Object.entries(campos).forEach(([k, v]) => setField(k, v));
+};
 
   const handleLogout = async () => { await logout(); router.replace("/login"); };
 
@@ -660,6 +688,11 @@ export default function FormScreen() {
         </View>
 
         {/* 1. DATOS DEL VECINO / PROPIETARIO */}
+
+        <TemplateSelector
+        onAplicar={handleAplicarTemplate}
+        onGuardarActual={() => setModalTemplateVisible(true)}
+      />
         <CollapsibleSection
           icon="user"
           title="Datos del Propietario"
@@ -1038,10 +1071,7 @@ export default function FormScreen() {
               value={form.firmaPropietarioPredio.correo} onChangeText={(v) => setFirmaProp("correo", v.trim())}
               keyboardType="email-address" autoCapitalize="none" />
           </Field>
-          <View style={styles.emailHint}>
-            <Feather name="mail" size={13} color={C.primary} />
-            <Text style={styles.emailHintText}>Se enviará un enlace a este correo para que el propietario complete y firme el acta.</Text>
-          </View>
+           
           <Field label="Firma">
             <SignaturePad onSignatureChange={(sig) => setFirmaProp("firma", sig)} />
           </Field>
@@ -1230,24 +1260,42 @@ export default function FormScreen() {
             <Text style={styles.sidebarItemDesc}>Formulario actual</Text>
           </View>
         </View>
+{/* Borradores con badge */}
+<Pressable
+  style={({ pressed }) => [styles.sidebarItem, pressed && { opacity: 0.7 }]}
+  onPress={() => navigateTo('/borradores')}
+>
+  <View style={styles.sidebarItemIcon}>
+    <Feather name="save" size={16} color={C.primary} />
+  </View>
+  <View style={styles.sidebarItemText}>
+    <Text style={styles.sidebarItemLabel}>Borradores</Text>
+    <Text style={styles.sidebarItemDesc}>Actas guardadas localmente</Text>
+  </View>
+  {totalBorradores > 0 && (
+    <View style={styles.sidebarBadge}>
+      <Text style={styles.sidebarBadgeText}>{totalBorradores}</Text>
+    </View>
+  )}
+</Pressable>
 
-        {/* Resto de ítems */}
-        {SIDEBAR_ITEMS.map((item) => (
-          <Pressable
-            key={item.route}
-            style={({ pressed }) => [styles.sidebarItem, pressed && { opacity: 0.7 }]}
-            onPress={() => navigateTo(item.route)}
-          >
-            <View style={styles.sidebarItemIcon}>
-              <Feather name={item.icon} size={16} color={C.primary} />
-            </View>
-            <View style={styles.sidebarItemText}>
-              <Text style={styles.sidebarItemLabel}>{item.label}</Text>
-              <Text style={styles.sidebarItemDesc}>{item.description}</Text>
-            </View>
-            <Feather name="chevron-right" size={14} color={C.textSecondary} />
-          </Pressable>
-        ))}
+{/* Resto de ítems */}
+{SIDEBAR_ITEMS.map((item) => (
+  <Pressable
+    key={item.route}
+    style={({ pressed }) => [styles.sidebarItem, pressed && { opacity: 0.7 }]}
+    onPress={() => navigateTo(item.route)}
+  >
+    <View style={styles.sidebarItemIcon}>
+      <Feather name={item.icon} size={16} color={C.primary} />
+    </View>
+    <View style={styles.sidebarItemText}>
+      <Text style={styles.sidebarItemLabel}>{item.label}</Text>
+      <Text style={styles.sidebarItemDesc}>{item.description}</Text>
+    </View>
+    <Feather name="chevron-right" size={14} color={C.textSecondary} />
+  </Pressable>
+))}
 
         <View style={styles.sidebarDivider} />
 
@@ -1285,6 +1333,22 @@ export default function FormScreen() {
           </Text>
         </View>
       )}
+
+
+      <GuardarBorradorModal
+  visible={modalBorradorVisible}
+  nombreSugerido={form.direccion || form.nombre || ''}
+  onGuardar={handleGuardarBorrador}
+  onCancelar={() => setModalBorradorVisible(false)}
+/>
+
+{/* Reutilizamos el mismo modal para guardar plantilla */}
+<GuardarBorradorModal
+  visible={modalTemplateVisible}
+  nombreSugerido={form.nombre || ''}
+  onGuardar={handleGuardarComoTemplate}
+  onCancelar={() => setModalTemplateVisible(false)}
+/>
     </View>
   );
 }
@@ -1500,6 +1564,11 @@ const styles = StyleSheet.create({
   sidebarUserName:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.text },
   sidebarUserRole:       { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
   sidebarLogoutBtn:      { width: 32, height: 32, borderRadius: 9, backgroundColor: C.error + "15", justifyContent: "center", alignItems: "center" },
+sidebarBadge: {
+  backgroundColor: C.accent, borderRadius: 10,
+  paddingHorizontal: 7, paddingVertical: 2, minWidth: 20, alignItems: 'center',
+},
+sidebarBadgeText: { fontSize: 11, fontFamily: 'Inter_700Bold', color: '#fff' },
 
   errorSummary:       { backgroundColor: "#FFF5F5", borderRadius: 14, padding: 16, borderWidth: 1.5, borderColor: "#FEB2B2", gap: 8 },
   errorSummaryHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
