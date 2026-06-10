@@ -2,9 +2,10 @@
   "expo": {
     "name": "App Vecindad",
     "slug": "my-app",
+    "jsEngine": "hermes",
     "version": "1.0.3",
     "orientation": "portrait",
-    "icon": "./assets/images/senciaLogo.jpeg",
+    "icon": "./assets/images/senciaLogo.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -71,7 +72,7 @@
     },
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     },
     "extra": {
       "router": {

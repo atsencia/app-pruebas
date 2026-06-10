@@ -4,6 +4,9 @@
       "android": {
         "buildType": "apk"
       },
+      "cache": {
+        "disabled": true
+      },
       "channel": "preview"
     },
     "preview2": {
