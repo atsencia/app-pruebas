@@ -42,6 +42,7 @@
       ]
     },
     "plugins": [
+      "./plugins/withOsmMap",
       [
         "expo-image-picker",
         {
