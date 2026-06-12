@@ -18,7 +18,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/contexts/AuthContext";
 import SignaturePad from "@/components/SignaturePad";
-import MapPicker from "@/components/MapPicker";
+import MapPicker from "../components/MapPicker";
 import PhotoPickerSection from "@/components/PhotoPickerSection";
 import VideoPickerSection from "@/components/VideoPickerSection";
 import ToggleField from "@/components/ToggleField";
