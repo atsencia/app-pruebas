@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, DeviceEventEmitter,
+  View, Text, StyleSheet,
   Modal, TouchableOpacity, Platform,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -21,15 +21,6 @@ export default function MapPicker({ latitud, longitud, onLocationChange }: Props
   const [modalVisible, setModalVisible] = useState(false);
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  useEffect(() => {
-    const sub = DeviceEventEmitter.addListener(
-      "onOsmLocationSelected",
-      ({ lat, lng }: { lat: number; lng: number }) => {
-        setPendingCoords({ lat, lng });
-      }
-    );
-    return () => sub.remove();
-  }, []);
 
   const handleConfirm = () => {
     if (pendingCoords) {
@@ -115,13 +106,18 @@ export default function MapPicker({ latitud, longitud, onLocationChange }: Props
 
           {/* Mapa nativo — ocupa todo el espacio restante */}
           <NativeOsmMap
-            style={styles.fullMap}
-            initialLocation={
-              displayCoords
-                ? { lat: displayCoords.lat, lng: displayCoords.lng }
-                : undefined
-            }
-          />
+  style={styles.fullMap}
+  initialLocation={
+    displayCoords
+      ? { lat: displayCoords.lat, lng: displayCoords.lng }
+      : undefined
+  }
+  onOsmLocationSelected={(e) => {
+    const { lat, lng } = e.nativeEvent;
+    console.log('COORDS:', lat, lng);
+    setPendingCoords({ lat, lng });
+  }}
+/>
 
           {/* Preview de coordenadas dentro del modal */}
           {displayCoords && (

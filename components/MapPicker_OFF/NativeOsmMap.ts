@@ -1,8 +1,3 @@
-import { requireNativeComponent, ViewStyle } from 'react-native';
-
-interface NativeOsmMapProps {
-  style?: ViewStyle;
-  initialLocation?: { lat: number; lng: number };
-}
-
-export default requireNativeComponent<NativeOsmMapProps>('OsmMapView');
+import { NativeMapView, NativeMapViewProps } from 'native-map';
+export { NativeMapViewProps };
+export default NativeMapView;

@@ -1,0 +1,56 @@
+{
+  "name": "native-map",
+  "version": "0.1.0",
+  "description": "My new module",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "scripts": {
+    "build": "node internal/module_scripts/build.js",
+    "clean": "node internal/module_scripts/clean.js",
+    "lint": "eslint src/",
+    "test": "node internal/module_scripts/test.js",
+    "open:ios": "node internal/module_scripts/open-ios.js",
+    "open:android": "node internal/module_scripts/open-android.js"
+  },
+  "keywords": [
+    "react-native",
+    "expo",
+    "native-map",
+    "NativeMap"
+  ],
+  "repository": "https://github.com/atsencia/app-pruebas",
+  "bugs": {
+    "url": "https://github.com/atsencia/app-pruebas/issues"
+  },
+  "author": "Alejandro Testa <a.s.testa.c@gmail.com> (https://github.com/tezzzta)",
+  "license": "MIT",
+  "homepage": "https://github.com/atsencia/app-pruebas#readme",
+  "dependencies": {
+     "expo-modules-core": "~2.2.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/jest": "^29.5.14",
+    "@types/react": "~19.1.1",
+    "babel-preset-expo": "~54.0.10",
+    "eslint": "~9.39.4",
+    "eslint-config-universe": "^15.0.3",
+    "expo": "~54.0.35",
+    "jest": "^29.7.0",
+    "jest-expo": "~54.0.0",
+    "prettier": "^3.0.0",
+    "react-native": "0.81.5",
+    "typescript": "~5.9.2"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "roots": [
+      "<rootDir>/src"
+    ]
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}
