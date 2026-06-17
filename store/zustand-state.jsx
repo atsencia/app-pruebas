@@ -27,7 +27,8 @@ const initialFormData = {
   tieneZona: false, zonaDesc: "",
   acabadosPisos: "", estadoFachada: "",
   verticalidad: false, verticalidadNotas: "",
-  planTopografico: false, observacionesProfesional: "",
+planTopografico: false, planTopograficoArchivo: null,
+observacionesProfesional: "",  // ← agrégala de vuelta
   fotos: [], fotosFachada: [], videos: [],
 };
 

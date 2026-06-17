@@ -25,7 +25,7 @@ export function useBorradoresActions() {
       fotosFachada: borrador.formData.fotosFachada ?? [],
       videos:       (borrador.formData.videos ?? []).map(v => ({ uri: v.uri })),
       extra:        borrador.formData,
-      registro_uuid: `borrador_${borrador.id}_${Date.now()}`,
+      // registro_uuid: `borrador_${borrador.id}_${Date.now()}`,
     };
 
     marcarEnCola(borrador.id);

@@ -28,7 +28,7 @@ import { useFormStore, useBorradores  } from '../store/zustand-state';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
 import QueueStatusBar from '@/components/QueueStatusBar';
 import ActasMovistar from '@/components/ActasMovistar';
-
+import * as DocumentPicker from 'expo-document-picker';
 import { useBorradoresActions } from '../hooks/useBorradoresActions';
 import { usePredioTemplates } from '@/store/zustand-state';
 import GuardarBorradorModal from '@/components/GuardarBorradorModal';
@@ -120,6 +120,7 @@ export interface FormData {
   fotos:        { uri: string; descripcion: string }[];
   fotosFachada: { uri: string; descripcion: string }[];
   videos:       VideoItem[];
+  planTopograficoArchivo: { uri: string; nombre: string } | null;
 }
 
 interface FieldErrors {
@@ -1023,18 +1024,64 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         )}
 
         {/* 10. DOCUMENTACIÓN ADICIONAL */}
-        <Section icon="file-text" title="Documentación Adicional">
-          <ToggleField label="Plano de ubicación topográfica radicado"
-            description="Incluye predios, vías y demás zonas involucradas en la actividad."
-            value={form.planTopografico} onChange={(v) => set("planTopografico", v)} />
-          <View style={styles.divider} />
-          <Field label="Observaciones del profesional">
-            <TextInput style={[styles.input, styles.inputMultiline]}
-              placeholder="Cualquier observación adicional..." placeholderTextColor={C.textSecondary}
-              value={form.observacionesProfesional} onChangeText={(v) => set("observacionesProfesional", v)}
-              multiline numberOfLines={4} />
-          </Field>
-        </Section>
+       
+<Section icon="file-text" title="Documentación Adicional">
+  <ToggleField
+    label="Plano de ubicación topográfica radicado"
+    description="Incluye predios, vías y demás zonas involucradas en la actividad."
+    value={form.planTopografico}
+    onChange={(v) => { set("planTopografico", v); if (!v) set("planTopograficoArchivo", null); }}
+  />
+
+  {form.planTopografico && (
+    <Pressable
+      onPress={async () => {
+        const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf' });
+        if (!result.canceled && result.assets?.[0]) {
+          const { uri, name } = result.assets[0];
+          set("planTopograficoArchivo", { uri, nombre: name });
+        }
+      }}
+      style={{
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+        borderWidth: 1.5, borderStyle: 'dashed',
+        borderColor: form.planTopograficoArchivo ? C.primary : C.border,
+        backgroundColor: form.planTopograficoArchivo ? C.primary + '0D' : C.inputBg,
+        borderRadius: 12, padding: 14,
+      }}
+    >
+      <Feather
+        name={form.planTopograficoArchivo ? 'file-text' : 'upload'}
+        size={18}
+        color={form.planTopograficoArchivo ? C.primary : C.textSecondary}
+      />
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 13, fontFamily: 'Inter_600SemiBold',
+          color: form.planTopograficoArchivo ? C.primary : C.textSecondary }}>
+          {form.planTopograficoArchivo ? form.planTopograficoArchivo.nombre : 'Seleccionar PDF'}
+        </Text>
+        {form.planTopograficoArchivo && (
+          <Text style={{ fontSize: 11, fontFamily: 'Inter_400Regular', color: C.textSecondary, marginTop: 2 }}>
+            Toca para cambiar
+          </Text>
+        )}
+      </View>
+      {form.planTopograficoArchivo && (
+        <Pressable onPress={() => set("planTopograficoArchivo", null)} hitSlop={8}>
+          <Feather name="x" size={16} color={C.textSecondary} />
+        </Pressable>
+      )}
+    </Pressable>
+  )}
+
+  <View style={styles.divider} />
+  <Field label="Observaciones del profesional">
+    <TextInput style={[styles.input, styles.inputMultiline]}
+      placeholder="Cualquier observación adicional..." placeholderTextColor={C.textSecondary}
+      value={form.observacionesProfesional} onChangeText={(v) => set("observacionesProfesional", v)}
+      multiline numberOfLines={4} />
+  </Field>
+</Section>
 
         {/* 11. FOTOGRAFÍAS GENERALES */}
         <Section icon="camera" title="Fotografías Generales">
