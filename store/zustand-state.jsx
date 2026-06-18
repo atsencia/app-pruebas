@@ -27,6 +27,9 @@ const initialFormData = {
   tieneZona: false, zonaDesc: "",
   acabadosPisos: "", estadoFachada: "",
   verticalidad: false, verticalidadNotas: "",
+    // ── NUEVO ──
+  tipoRegistro:    'normal',   // 'normal' | 'acta_madre' | 'zona_proyecto'
+  codigoProyecto:  '',         // ej. 'movistar_arena_2025'
 planTopografico: false, planTopograficoArchivo: null,
 observacionesProfesional: "",  // ← agrégala de vuelta
   fotos: [], fotosFachada: [], videos: [],

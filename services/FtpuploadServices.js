@@ -1,6 +1,7 @@
 // services/FTPUploadService.js
 import * as FileSystem from 'expo-file-system/legacy';
 import FTPClient from './FTPClient';
+import { Buffer } from 'buffer';
 
 const FTP_CONFIG = {
   host: '187.33.154.112',
@@ -313,19 +314,9 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}, toke
     }
   }
 
-  // ⚠️ TEMPORAL: aunque el 2do intento falle, reportamos éxito al cliente
-  console.warn(
-    '[FTPUpload] Ambos intentos fallaron. Reportando éxito al cliente de todas formas:',
-    ultimoError?.message
-  );
-  onProgreso(100, '¡Registro enviado correctamente!');
-  return {
-    success:  true,
-    completo: true,
-    id,
-    carpeta:  id,
-    mensaje:  'Registro enviado correctamente',
-  };
+  // ✅ Ahora lanza el error real en lugar de reportar éxito falso
+  console.error('[FTPUpload] Ambos intentos fallaron:', ultimoError?.message);
+  throw ultimoError;
 }
 
 // ==================== LÓGICA INTERNA (un solo intento) ====================
@@ -346,31 +337,49 @@ async function _subirFormularioFTPInterno(id, formulario, onProgreso) {
 
     const datosJSON = construirDatosJSON(id, formulario, listaMultimedia);
 
+    // ── datos.json con verificación ──────────────────────────
     onProgreso(15, 'Subiendo datos.json...');
-    await ftp.subirArchivo(
-      JSON.stringify(datosJSON, null, 2),
-      `${carpeta}/datos.json`,
-      false
-    );
+    const jsonStr   = JSON.stringify(datosJSON, null, 2);
+    const jsonBytes = Buffer.from(jsonStr, 'utf8').length;
 
+    await ftp.subirArchivo(jsonStr, `${carpeta}/datos.json`, false);
+
+    const tamanoJsonRemoto = await ftp.obtenerTamanoRemoto(`${carpeta}/datos.json`);
+    if (tamanoJsonRemoto !== null && tamanoJsonRemoto !== jsonBytes) {
+      throw new Error(
+        `datos.json incompleto: esperado ${jsonBytes} bytes, llegaron ${tamanoJsonRemoto}`
+      );
+    }
+
+    // ── Multimedia con verificación ───────────────────────────
     const total = listaMultimedia.length;
     for (let i = 0; i < total; i++) {
-      const item = listaMultimedia[i];
+      const item       = listaMultimedia[i];
       const rutaRemota = `${carpeta}/${item.nombreRemoto}`;
-      const basePct = 25 + Math.round((i / total) * 65);
+      const basePct    = 25 + Math.round((i / total) * 65);
 
       onProgreso(basePct, `Subiendo ${item.categoria} (${i + 1}/${total}): ${item.nombreRemoto}`);
 
-      await ftp.subirArchivoDesdeURI(item.uriLocal, rutaRemota, (sent, totalBytes) => {
-        const pct = basePct + Math.round((sent / totalBytes) * (65 / total));
-        onProgreso(pct, `${item.nombreRemoto}: ${Math.round((sent / totalBytes) * 100)}%`);
-      });
+      const fileInfo    = await FileSystem.getInfoAsync(item.uriLocal, { size: true });
+      const tamanoLocal = fileInfo.size ?? null;
+
+      await subirYVerificar(
+        ftp,
+        item.uriLocal,
+        rutaRemota,
+        tamanoLocal,
+        (sent, totalBytes) => {
+          const pct = basePct + Math.round((sent / totalBytes) * (65 / total));
+          onProgreso(pct, `${item.nombreRemoto}: ${Math.round((sent / totalBytes) * 100)}%`);
+        }
+      );
 
       if (item.esTemporal) {
         await FileSystem.deleteAsync(item.uriLocal, { idempotent: true }).catch(() => {});
       }
     }
 
+    // ── .done solo si todo pasó verificación ─────────────────
     await ftp.subirArchivo(
       JSON.stringify({ completado: true, timestamp: new Date().toISOString() }),
       `${carpeta}/.done`,
@@ -378,34 +387,6 @@ async function _subirFormularioFTPInterno(id, formulario, onProgreso) {
     );
 
     await ftp.disconnect();
-
-    // ── Validación deshabilitada temporalmente ─────────────────────
-    // onProgreso(98, 'Validando integridad de la subida...');
-    // if (token) {
-    //   try {
-    //     const validacion = await fetch(
-    //       `https://187.33.154.112.sslip.io/backend/api/registros/${id}/validar`,
-    //       { headers: { Authorization: `Bearer ${token}` } }
-    //     );
-    //     const resultado = await validacion.json();
-    //
-    //     if (!resultado.completo) {
-    //       console.warn('[FTPUpload] Subida incompleta:', resultado.faltantes);
-    //       onProgreso(100, `⚠️ Subida parcial: faltan ${resultado.faltantes.length} archivos`);
-    //       return {
-    //         success:   true,
-    //         id,
-    //         carpeta:   id,
-    //         completo:  false,
-    //         faltantes: resultado.faltantes,
-    //         mensaje:   `Subida parcial: faltan ${resultado.faltantes.length} archivos`,
-    //       };
-    //     }
-    //   } catch (e) {
-    //     console.warn('[FTPUpload] No se pudo validar por HTTP:', e.message);
-    //   }
-    // }
-    // ────────────────────────────────────────────────────────────────
 
     onProgreso(100, '¡Registro enviado correctamente!');
     return {
@@ -425,7 +406,22 @@ async function _subirFormularioFTPInterno(id, formulario, onProgreso) {
       }
     }
 
-    throw error; // re-lanza para que el wrapper de arriba maneje el reintento
+    throw error;
   }
 }
+// Función helper de verificación
+async function subirYVerificar(ftp, uriLocal, rutaRemota, totalBytes, onProgreso) {
+  await ftp.subirArchivoDesdeURI(uriLocal, rutaRemota, onProgreso);
 
+  const tamanoRemoto = await ftp.obtenerTamanoRemoto(rutaRemota);
+  if (tamanoRemoto === null) {
+    console.warn(`[Verificar] SIZE no soportado para ${rutaRemota}`);
+    return;
+  }
+  if (tamanoRemoto !== totalBytes) {
+    throw new Error(
+      `Archivo incompleto: ${rutaRemota} — esperado ${totalBytes} bytes, llegaron ${tamanoRemoto}`
+    );
+  }
+  console.log(`[Verificar] ✅ ${rutaRemota} (${tamanoRemoto} bytes)`);
+}

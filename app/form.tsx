@@ -33,7 +33,7 @@ import { useBorradoresActions } from '../hooks/useBorradoresActions';
 import { usePredioTemplates } from '@/store/zustand-state';
 import GuardarBorradorModal from '@/components/GuardarBorradorModal';
 import TemplateSelector from '@/components/TemplateSelector';
-
+import * as Crypto from 'expo-crypto'; 
 const C             = Colors.light;
 const SIDEBAR_WIDTH = 260;
 
@@ -121,6 +121,8 @@ export interface FormData {
   fotosFachada: { uri: string; descripcion: string }[];
   videos:       VideoItem[];
   planTopograficoArchivo: { uri: string; nombre: string } | null;
+  tipoRegistro:   'normal' | 'acta_madre' | 'zona_proyecto';
+  codigoProyecto: string;
 }
 
 interface FieldErrors {
@@ -307,6 +309,7 @@ export default function FormScreen() {
   const { user, logout } = useAuth();
   const isAdmin = !!user?.isAdmin;  
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const CODIGO_PROYECTO_MOVISTAR = 'movistar_arena_2025';
 
       const { guardar } = useBorradoresActions();
       const { crearDesdeForm } = usePredioTemplates();
@@ -457,7 +460,9 @@ export default function FormScreen() {
 
   const pisos            = parseInt(form.numeroPisos, 10);
   const showVerticalidad = !isNaN(pisos) && pisos >= 4;
-
+  const esZona    = form.tipoRegistro === 'zona_proyecto';
+  const esMadre   = form.tipoRegistro === 'acta_madre';
+  const esNormal  = form.tipoRegistro === 'normal';
   const set = (key: keyof FormData, value: any) => setField(key, value);
 
   const setFirma = (
@@ -478,25 +483,39 @@ export default function FormScreen() {
   };
 
   // ── Validación ──────────────────────────────
-  const validate = (): boolean => {
-    const e: FieldErrors = {};
-    if (!(form.nombre ?? "").trim()) e.nombre = "El nombre es requerido";
-    if (!(form.cedula ?? "").trim()) {
-      e.cedula = "La cédula es requerida";
-    } else if (!/^\d{6,12}$/.test((form.cedula ?? "").trim())) {
-      e.cedula = "La cédula debe tener entre 6 y 12 dígitos";
+ const validate = (): boolean => {
+  const e: FieldErrors = {};
+
+  if (!esZona) {
+    // estos campos solo son requeridos si NO es zona
+    if (!(form.nombre ?? '').trim())    e.nombre    = 'El nombre es requerido';
+    if (!(form.cedula ?? '').trim()) {
+      e.cedula = 'La cédula es requerida';
+    } else if (!/^\d{6,12}$/.test((form.cedula ?? '').trim())) {
+      e.cedula = 'La cédula debe tener entre 6 y 12 dígitos';
     }
-    if (!(form.direccion ?? "").trim()) e.direccion = "La dirección es requerida";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
+    if (!(form.direccion ?? '').trim()) e.direccion = 'La dirección es requerida';
+  }
+
+  // codigoProyecto requerido si es madre o zona
+  if ((esMadre || esZona) && !(form.codigoProyecto ?? '').trim()) {
+    // puedes agregar un error específico o un Alert
+    Alert.alert('Falta el código de proyecto', 'Ingresa el código antes de enviar.');
+    return false;
+  }
+
+  setErrors(e);
+  return Object.keys(e).length === 0;
+};
 
   // ── JSON objetivo ───────────────────────────
   const buildDatos = () => ({
     tipoActa:  form.tipoActa,
     nombre:    (form.nombre   ?? "").trim(),
     cedula:    (form.cedula   ?? "").trim(),
-    direccion: direccionFinal(),
+     direccion: esZona
+    ? (form.zonaDesc ?? '').trim()          // solo la zona, el processor concatena
+    : direccionFinal(),  
     telefono:  (form.telefono ?? "").trim(),
     georef:    { latitud: form.latitud, longitud: form.longitud },
     latitud:   form.latitud,
@@ -560,6 +579,8 @@ export default function FormScreen() {
     fotosCount:        form.fotos.length,
     fotosFachadaCount: form.fotosFachada.length,
     videosCount:       form.videos.length,
+      tipoRegistro:   form.tipoRegistro,
+      codigoProyecto: form.codigoProyecto || null,
   });
 
   // ── Submit ──────────────────────────────────
@@ -573,12 +594,14 @@ export default function FormScreen() {
       const formulario = {
         nombre:        (form.nombre ?? '').trim(),
         apellido:      (form.cedula ?? '').trim(),
-        direccion:     direccionFinal(),
+         direccion: esZona
+          ? (form.zonaDesc ?? '').trim()
+          : direccionFinal(),
         georef:        { latitud: form.latitud, longitud: form.longitud },
         fotos:         form.fotos,
         fotosFachada:  form.fotosFachada,
         videos:        form.videos.map((v: any) => ({ uri: v.uri })),
-        extra:         buildDatos(),
+        extra:         buildDatos(), //lo q dice el pana claudio
         registro_uuid: isEditing ? registro_uuid : undefined,
         revisado_por:  user?.username ?? null,
       };
@@ -663,9 +686,44 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* 0-A. TIPO DE REGISTRO */}
+<View style={styles.tipoActaCard}>
+  <Text style={styles.tipoActaLabel}>TIPO DE REGISTRO</Text>
+  <View style={styles.tipoActaRow}>
+    {[
+      { value: 'normal',         label: 'Acta Regular'       },
+      { value: 'acta_madre',     label: 'Acta Inicial' },
+      { value: 'zona_proyecto',  label: 'Por Zona'     },
+    ].map((opt) => {
+      const active = form.tipoRegistro === opt.value;
+      return (
+          <Pressable
+      key={opt.value}
+      style={[styles.tipoActaBtn, active && styles.tipoActaBtnActive]}
+      onPress={() => {
+        set('tipoRegistro', opt.value);
+        // ← auto-asigna el código si es madre o zona, sin que el usuario escriba nada
+        if (opt.value === 'acta_madre' || opt.value === 'zona_proyecto') {
+          set('codigoProyecto', CODIGO_PROYECTO_MOVISTAR);
+        } else {
+          set('codigoProyecto', '');
+        }
+      }}
+    >
+          <Text style={[styles.tipoActaBtnText, active && styles.tipoActaBtnTextActive]}>
+            {opt.label}
+          </Text>
+        </Pressable>
+      );
+    })}
+  </View>
 
-        {/* 0. TIPO DE ACTA */}
-        <View style={styles.tipoActaCard}>
+  {/* Campo código de proyecto — solo visible si es acta_madre o zona_proyecto */}
+ 
+</View>
+
+    {!esZona && !esMadre && (
+         <View style={styles.tipoActaCard}>
           <Text style={styles.tipoActaLabel}>TIPO DE ACTA</Text>
           <View style={styles.tipoActaRow}>
             {TIPO_ACTA_OPTIONS.map((opt) => {
@@ -688,14 +746,16 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             })}
           </View>
         </View>
+    )}
 
-        {/* 1. DATOS DEL VECINO / PROPIETARIO */}
+        {/* 1. DATOS DEL PROPIETARIO, */}
 
-        <TemplateSelector
+        {/* <TemplateSelector
         onAplicar={handleAplicarTemplate}
         onGuardarActual={() => setModalTemplateVisible(true)}
-      />
-        <CollapsibleSection
+      /> */}
+       {!esZona && (
+         <CollapsibleSection
           icon="user"
           title="Datos del Propietario"
           filled={!!((form.nombre ?? "").trim() && (form.cedula ?? "").trim() && (form.direccion ?? "").trim())}
@@ -807,9 +867,11 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             </View>
           )}
         </CollapsibleSection>
+       )}
 
         {/* 2. INTERVENTORÍA */}
-        <Section icon="briefcase" title="Interventoría">
+        {!esZona && (
+           <Section icon="briefcase" title="Interventoría">
           <InfoBox text="Datos del representante delegado. Esta información se guardará en observaciones del acta." />
           <Field label="Nombre del delegado">
             <TextInput style={styles.input} placeholder="Nombre y apellidos" placeholderTextColor={C.textSecondary}
@@ -825,9 +887,11 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               keyboardType="email-address" autoCapitalize="none" />
           </Field>
         </Section>
+        )}
 
         {/* 3. DATOS DEL PREDIO */}
-        <Section icon="home" title="Datos del Predio">
+{!esZona && (
+          <Section icon="home" title="Datos del Predio">
           <View style={styles.row}>
             <View style={styles.rowHalf}>
               <Field label="Frente y fondo (m)">
@@ -859,9 +923,35 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           <View style={styles.divider} />
           <ToggleField label="¿Está ocupada actualmente?" value={form.estaOcupada} onChange={(v) => set("estaOcupada", v)} />
         </Section>
+)}
+        {/* 4-B. UBICACIÓN Y ZONA — solo visible si ES zona */}
+        {esZona && (
+          <Section icon="map-pin" title="Ubicación de la Zona">
+            <InfoBox text="Indica a qué zona del predio corresponde esta acta y captura su ubicación." />
+            
+            <Field label="Zona / Unidad">
+              <TextInput
+                style={styles.input}
+                placeholder="Ej. Cabina 2, Palco Norte, Zona VIP, Local 14..."
+                placeholderTextColor={C.textSecondary}
+                value={form.zonaDesc ?? ''}
+                onChangeText={(v) => set('zonaDesc', v)}
+              />
+            </Field>
 
+            <MapPicker
+              latitud={form.latitud}
+              longitud={form.longitud}
+              onLocationChange={(lat, lng) => {
+                setField('latitud', lat);
+                setField('longitud', lng);
+              }}
+            />
+          </Section>
+        )}
         {/* 4. INSPECCIÓN DE FACHADA Y UBICACIÓN */}
-        <CollapsibleSection
+    {!esZona && (
+          <CollapsibleSection
           icon="map"
           title="Fachada y Ubicación"
           filled={
@@ -905,9 +995,11 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           </Text>
           <PhotoPickerSection photos={form.fotosFachada} onPhotosChange={(fotos) => set("fotosFachada", fotos)} />
         </CollapsibleSection>
+    )}
 
         {/* 5. SERVICIOS PÚBLICOS */}
-        <Section icon="zap" title="Servicios Públicos">
+ {!esZona && (
+         <Section icon="zap" title="Servicios Públicos">
           <InfoBox text="Seleccione el estado de cada servicio. En 'Otros' describa servicios adicionales." />
           <View style={styles.servicesGrid}>
             {SERVICIOS.map(({ key, label }) => (
@@ -925,9 +1017,11 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             </View>
           </View>
         </Section>
+ )}
 
         {/* 6. USO ACTUAL */}
-        <Section icon="layers" title="Uso Actual del Predio">
+{!esZona && (
+          <Section icon="layers" title="Uso Actual del Predio">
           <InfoBox text="Seleccione el uso. Sin selección se enviará como 'N/A'." />
           {USOS_ACTUALES.map(({ key, label }) => (
             <View key={key} style={styles.usoRow}>
@@ -939,9 +1033,11 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             </View>
           ))}
         </Section>
+)}
 
         {/* 7. ACCESO VEHICULAR */}
-        <Section icon="truck" title="Acceso Vehicular">
+{!esZona && (
+          <Section icon="truck" title="Acceso Vehicular">
           <ToggleField label="¿Tiene garaje?" value={form.tieneGaraje} onChange={(v) => set("tieneGaraje", v)} />
           {form.tieneGaraje && (
             <>
@@ -980,9 +1076,11 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               value={form.anchoAccesoVehicular} onChangeText={(v) => set("anchoAccesoVehicular", v)} keyboardType="decimal-pad" />
           </Field>
         </Section>
+)}
 
         {/* 8. EVALUACIÓN ESTRUCTURAL */}
-        <Section icon="alert-triangle" title="Evaluación Estructural">
+  {!esMadre &&(
+          <Section icon="alert-triangle" title="Evaluación Estructural">
           <InfoBox text="Las fisuras son discontinuidades en muros, vigas, columnas, losas y placas de entrepiso." />
           <ToggleField label="Fisuras cerradas" description="Discontinuidad cerrada que no afecta la calidad estructural."
             value={form.fisurasCerradas} onChange={(v) => set("fisurasCerradas", v)} />
@@ -1008,9 +1106,10 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               value={form.grietasDesc} onChangeText={(v) => set("grietasDesc", v)} multiline numberOfLines={2} />
           )}
         </Section>
+  )}
 
         {/* 9. VERTICALIDAD */}
-        {showVerticalidad && (
+        {showVerticalidad &&  !esMadre &&(
           <Section icon="bar-chart-2" title="Verticalidad (≥4 niveles)">
             <InfoBox text="Verificar por topografía la verticalidad a lo largo de un vértice de la edificación." />
             <ToggleField label="¿Se evidencia variación de verticalidad?" value={form.verticalidad} onChange={(v) => set("verticalidad", v)} />
@@ -1084,19 +1183,24 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
 </Section>
 
         {/* 11. FOTOGRAFÍAS GENERALES */}
-        <Section icon="camera" title="Fotografías Generales">
+    {!esMadre &&(
+              <Section icon="camera" title="Fotografías Generales">
           <InfoBox text="Fotos del interior, estructura, y demás elementos del predio." />
           <PhotoPickerSection photos={form.fotos} onPhotosChange={(fotos) => set("fotos", fotos)}
             showDescription={true} maxPhotos={15} />
         </Section>
+    )}
 
         {/* 12. VIDEOS */}
-        <Section icon="video" title="Videos">
+{ !esMadre &&(
+          <Section icon="video" title="Videos">
           <VideoPickerSection videos={form.videos} onVideosChange={(videos) => set("videos", videos)} />
         </Section>
+)}
 
         {/* 13. FIRMA — DUEÑO DEL PREDIO */}
-        <FirmaSection icon="home" title="Firma del Dueño del Predio" signed={!!form.firmaPropietarioPredio.firma}>
+  {!esZona && (
+            <FirmaSection icon="home" title="Firma del Dueño del Predio" signed={!!form.firmaPropietarioPredio.firma}>
           <InfoBox text="Datos de contacto y firma manuscrita del propietario o residente del predio." />
           <View style={styles.row}>
             <View style={styles.rowHalf}>
@@ -1130,6 +1234,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             </View>
           )}
         </FirmaSection>
+  )}
 
         {/* 14. FIRMA — CONCESIONARIO */}
         <FirmaSection icon="award" title="Representante Delegado Sencia S.A.S." signed={!!form.firmaConcesionario.firma}>
@@ -1392,8 +1497,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
   onCancelar={() => setModalBorradorVisible(false)}
 />
 
-{/* Reutilizamos el mismo modal para guardar plantilla */}
-<GuardarBorradorModal
+ <GuardarBorradorModal
   visible={modalTemplateVisible}
   nombreSugerido={form.nombre || ''}
   onGuardar={handleGuardarComoTemplate}

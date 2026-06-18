@@ -504,5 +504,16 @@ async _subirArchivoDesdeURIInterno(uriLocal, rutaRemota, onProgreso = null) {
       dataSocket.on('error', (err) => { clearTimeout(timer); reject(err); });
     });
   }
+
+  async obtenerTamanoRemoto(rutaRemota) {
+  try {
+    const respuesta = await this._sendCommand(`SIZE ${rutaRemota}`, '213');
+    // Respuesta: "213 12345"
+    const partes = respuesta.trim().split(' ');
+    return parseInt(partes[1], 10);
+  } catch {
+    return null; // servidor no soporta SIZE o archivo no existe
+  }
+}
 }
 
