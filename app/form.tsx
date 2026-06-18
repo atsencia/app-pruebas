@@ -835,7 +835,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               numberOfLines={3}
               editable={!isEditing}
             />
-          </Field>
+          </Field>    
 
           {/* ZONA / APARTAMENTO */}
           <ToggleField
@@ -1132,7 +1132,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
     onChange={(v) => { set("planTopografico", v); if (!v) set("planTopograficoArchivo", null); }}
   />
 
-  {form.planTopografico && (
+  {form.planTopografico &&!esZona && (
     <Pressable
       onPress={async () => {
         const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf' });
