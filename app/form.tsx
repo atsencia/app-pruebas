@@ -722,7 +722,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
  
 </View>
 
-    {!esZona && !esMadre && (
+    {!esZona && (
          <View style={styles.tipoActaCard}>
           <Text style={styles.tipoActaLabel}>TIPO DE ACTA</Text>
           <View style={styles.tipoActaRow}>
