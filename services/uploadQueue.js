@@ -11,6 +11,10 @@ const QUEUE_KEY = 'ftp_upload_queue';
 export const ESTADO = {
   PENDIENTE: 'pendiente',
   SUBIENDO:  'subiendo',
+  // Los archivos ya llegaron al FTP (.done subido) pero el backend
+  // todavía no confirma que la carpeta esté completa — se sigue
+  // reintentando la validación en cada tick, sin re-subir nada.
+  VERIFICANDO: 'verificando',
   COMPLETADO: 'completado',
   ERROR:      'error',
 };
@@ -106,6 +110,7 @@ export async function obtenerEstadisticas() {
     total:      cola.length,
     pendientes: cola.filter(i => i.estado === ESTADO.PENDIENTE).length,
     subiendo:   cola.filter(i => i.estado === ESTADO.SUBIENDO).length,
+    verificando:cola.filter(i => i.estado === ESTADO.VERIFICANDO).length,
     completados:cola.filter(i => i.estado === ESTADO.COMPLETADO).length,
     errores:    cola.filter(i => i.estado === ESTADO.ERROR).length,
     items:      cola, // lista completa para la pantalla de cola

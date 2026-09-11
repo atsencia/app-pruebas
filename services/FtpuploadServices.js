@@ -11,6 +11,26 @@ const FTP_CONFIG = {
   baseDir: '/home/ftpuser/uploads',
 };
 
+// Mismo backend que usa AuthContext — confirma contra el servidor que la
+// carpeta subida por FTP quedó completa (existe .done + toda la multimedia
+// listada en datos.json), en vez de asumir éxito solo porque el FTP no tiró error.
+const API_BASE = 'https://187.33.154.112.sslip.io/backend';
+
+export async function validarSubidaBackend(carpeta, token) {
+  try {
+    const res = await fetch(`${API_BASE}/api/registros/${encodeURIComponent(carpeta)}/validar`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, completo: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return data; // { ok, completo, done, total, subidos, faltantes, archivos }
+  } catch (e) {
+    return { ok: false, completo: false, error: e.message };
+  }
+}
+
 function generarIDUnico() {
   const ahora = new Date();
   const fecha = ahora.toISOString().replace(/[-:T.]/g, '').substring(0, 15);

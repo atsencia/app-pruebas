@@ -15,10 +15,11 @@ const C = Colors.light;
 
 // ── Colores por estado ────────────────────────────────────────
 const ESTADO_CONFIG: Record<string, { color: string; icon: any; label: string }> = {
-  pendiente:  { color: '#DD6B20', icon: 'clock',         label: 'En cola'    },
-  subiendo:   { color: '#2563EB', icon: 'upload-cloud',  label: 'Subiendo'   },
-  completado: { color: '#16A34A', icon: 'check-circle',  label: 'Completado' },
-  error:      { color: '#DC2626', icon: 'alert-circle',  label: 'Error'      },
+  pendiente:   { color: '#DD6B20', icon: 'clock',         label: 'En cola'      },
+  subiendo:    { color: '#2563EB', icon: 'upload-cloud',  label: 'Subiendo'     },
+  verificando: { color: '#7C3AED', icon: 'loader',        label: 'Verificando'  },
+  completado:  { color: '#16A34A', icon: 'check-circle',  label: 'Completado'   },
+  error:       { color: '#DC2626', icon: 'alert-circle',  label: 'Error'        },
 };
 
 // ── Tarjeta individual de un ítem ────────────────────────────
@@ -84,6 +85,16 @@ function ItemCard({
         </View>
       )}
 
+      {/* Esperando confirmación del backend (ya se subió, aún no confirma) */}
+      {item.estado === 'verificando' && (
+        <View style={styles.subiendoRow}>
+          <ActivityIndicator size="small" color="#7C3AED" />
+          <Text style={[styles.subiendoText, { color: '#7C3AED' }]}>
+            Verificando en el servidor...
+          </Text>
+        </View>
+      )}
+
       {/* Acción reintentar */}
       {item.estado === 'error' && (
         <Pressable
@@ -110,7 +121,7 @@ function MetaChip({ icon, label, color }: { icon: any; label: string; color?: st
 // ── Pantalla principal ───────────────────────────────────────
 export default function QueueScreen() {
   const insets = useSafeAreaInsets();
-  const { items, pendientes, subiendo, errores, completados, reintentar, limpiar, refrescar } =
+  const { items, pendientes, subiendo, verificando, errores, completados, reintentar, limpiar, refrescar } =
     useUploadQueue();
 
   const [refreshing, setRefreshing] = React.useState(false);
@@ -125,10 +136,11 @@ export default function QueueScreen() {
 
   // Resumen en chips superiores
   const resumen = [
-    { label: 'En cola',    count: pendientes.length,  color: '#DD6B20' },
-    { label: 'Subiendo',   count: subiendo.length,    color: '#2563EB' },
-    { label: 'Completado', count: completados.length, color: '#16A34A' },
-    { label: 'Error',      count: errores.length,     color: '#DC2626' },
+    { label: 'En cola',     count: pendientes.length,  color: '#DD6B20' },
+    { label: 'Subiendo',    count: subiendo.length,    color: '#2563EB' },
+    { label: 'Verificando', count: verificando.length, color: '#7C3AED' },
+    { label: 'Completado',  count: completados.length, color: '#16A34A' },
+    { label: 'Error',       count: errores.length,     color: '#DC2626' },
   ];
 
   return (
@@ -190,8 +202,8 @@ export default function QueueScreen() {
             </Text>
           </View>
         ) : (
-          // Orden: subiendo → pendiente → error → completado
-          [...subiendo, ...pendientes, ...errores, ...completados].map(item => (
+          // Orden: subiendo → verificando → pendiente → error → completado
+          [...subiendo, ...verificando, ...pendientes, ...errores, ...completados].map(item => (
             <ItemCard key={item.id} item={item} onReintentar={reintentar} />
           ))
         )}

@@ -51,6 +51,7 @@ export function useUploadQueue() {
   // Atajos nombrados para el QueueStatusBar
   const pendientes  = stats.items.filter(i => i.estado === 'pendiente');
   const subiendo    = stats.items.filter(i => i.estado === 'subiendo');
+  const verificando = stats.items.filter(i => i.estado === 'verificando');
   const errores     = stats.items.filter(i => i.estado === 'error');
   const completados = stats.items.filter(i => i.estado === 'completado');
   const sinConexion = stats.subiendo === 0 && stats.pendientes > 0;
@@ -59,6 +60,7 @@ export function useUploadQueue() {
     ...stats,
     pendientes,
     subiendo,
+    verificando,
     errores,
     completados,
     sinConexion,

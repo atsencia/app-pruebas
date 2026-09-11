@@ -19,12 +19,13 @@ const C = Colors.light;
 
 export default function SuccessScreen() {
   const insets = useSafeAreaInsets();
-  const { numeroRegistro, nombre, fotosCount, fotosFachadaCount, videosCount } = useLocalSearchParams<{
+  const { numeroRegistro, nombre, fotosCount, fotosFachadaCount, videosCount, enCola } = useLocalSearchParams<{
   numeroRegistro: string;
   nombre: string;
   fotosCount: string;
   fotosFachadaCount: string;
   videosCount: string;
+  enCola: string;
 }>();
 
 const actaUrl = `http://187.33.154.112.sslip.io/backend/acta.html?id=${numeroRegistro}`;
@@ -64,6 +65,12 @@ const handleCopiar = async () => {
     router.replace("/form");
   };
 
+  const handleVerCola = () => {
+    router.replace("/queue");
+  };
+
+  const estaEnCola = enCola === "true";
+
   return (
     <View
       style={[
@@ -88,9 +95,13 @@ const handleCopiar = async () => {
         </Animated.View>
 
         <Animated.View style={[styles.textBlock, { opacity: fadeAnim }]}>
-          <Text style={styles.successLabel}>¡Registro Exitoso!</Text>
+          <Text style={styles.successLabel}>
+            {estaEnCola ? "¡Formulario guardado!" : "¡Registro Exitoso!"}
+          </Text>
           <Text style={styles.nombreText}>
-            {nombre || "Vecino"} ha sido registrado correctamente.
+            {estaEnCola
+              ? `El registro de ${nombre || "Vecino"} quedó en la cola de envío. Te avisamos cuando el servidor confirme que llegó completo — puedes seguirlo en "Cola de subida".`
+              : `${nombre || "Vecino"} ha sido registrado correctamente.`}
           </Text>
         </Animated.View>
 
@@ -165,6 +176,18 @@ const handleCopiar = async () => {
           </Animated.View>
 
         <Animated.View style={[styles.actions, { opacity: fadeAnim }]}>
+          {estaEnCola && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.verColaBtn,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+              ]}
+              onPress={handleVerCola}
+            >
+              <Feather name="upload-cloud" size={16} color={C.primary} />
+              <Text style={styles.verColaBtnText}>Ver cola de subida</Text>
+            </Pressable>
+          )}
           <Pressable
             style={({ pressed }) => [
               styles.newBtn,
@@ -269,6 +292,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4, shadowRadius: 10, elevation: 6,
   },
   newBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff" },
+
+  verColaBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#fff", borderRadius: 16, paddingVertical: 14,
+    borderWidth: 1.5, borderColor: C.primary,
+  },
+  verColaBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.primary },
 
   // ── URL y copiar ──────────────────────────────
   urlBox: {

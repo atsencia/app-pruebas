@@ -22,3 +22,19 @@ export function subirFormularioFTP(
   formulario: FTPFormulario,
   onProgreso?: (porcentaje: number, mensaje: string) => void,
 ): Promise<FTPResultado>;
+
+export interface ValidarSubidaResultado {
+  ok: boolean;
+  completo: boolean;
+  done?: boolean;
+  total?: number;
+  subidos?: number;
+  faltantes?: string[];
+  archivos?: Array<{ archivo: string; existe: boolean; bytes: number }>;
+  error?: string;
+}
+
+export function validarSubidaBackend(
+  carpeta: string,
+  token?: string | null,
+): Promise<ValidarSubidaResultado>;

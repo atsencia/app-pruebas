@@ -9,7 +9,7 @@ import {
   incrementarReintentos,
   ESTADO,
 } from './uploadQueue';
-import { subirFormularioFTP } from './FtpuploadServices';
+import { subirFormularioFTP, validarSubidaBackend } from './FtpuploadServices';
 
 // ── Imports opcionales (no disponibles en Expo Go / web) ─────
 let BackgroundFetch = null;
@@ -100,6 +100,29 @@ async function borrarArchivosLocales(formulario) {
   }
 }
 
+// ── Confirmar contra el backend tras la subida FTP ───────────
+// El FTPClient ya verificó tamaños durante la subida, así que apenas
+// termina normalmente el backend ya ve todo — unos pocos reintentos
+// cortos alcanzan. Si no confirma en ese lapso, no se asume ni éxito
+// ni error: el ítem queda en VERIFICANDO y sigue reintentándose desde
+// tick() sin volver a subir nada.
+const INTENTOS_VALIDACION_INICIAL = 4;
+const ESPERA_VALIDACION_MS = 3000;
+
+function esperar(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function confirmarConBackend(carpeta, token) {
+  let ultimo = { ok: false, completo: false };
+  for (let i = 0; i < INTENTOS_VALIDACION_INICIAL; i++) {
+    ultimo = await validarSubidaBackend(carpeta, token);
+    if (ultimo.completo) return ultimo;
+    await esperar(ESPERA_VALIDACION_MS);
+  }
+  return ultimo;
+}
+
 // ── Procesar un ítem ─────────────────────────────────────────
 async function procesarItem(item) {
   if (_enProceso.has(item.id)) return;
@@ -133,11 +156,34 @@ async function procesarItem(item) {
 
     if (!resultado.success) throw new Error(resultado.mensaje);
 
-    await actualizarEstado(item.id, ESTADO.COMPLETADO, {
-      completadoEn: new Date().toISOString(),
-    });
-    await borrarArchivosLocales(item.formulario);
-    notificar({ tipo: 'completado', id: item.id, carpeta: resultado.carpeta });
+    notificar({ tipo: 'verificando', id: item.id });
+    const confirmacion = await confirmarConBackend(resultado.carpeta, item.token);
+
+    if (confirmacion.completo) {
+      await actualizarEstado(item.id, ESTADO.COMPLETADO, {
+        completadoEn: new Date().toISOString(),
+      });
+      await borrarArchivosLocales(item.formulario);
+      notificar({ tipo: 'completado', id: item.id, carpeta: resultado.carpeta });
+    } else {
+      // El FTP terminó bien pero el backend todavía no confirma la carpeta
+      // como completa (ej. .done tardó en llegar, o faltó algún archivo).
+      // No se borra nada local todavía ni se marca error: se reintenta la
+      // validación (sin re-subir) en cada tick hasta que el backend confirme.
+      await actualizarEstado(item.id, ESTADO.VERIFICANDO, {
+        carpetaFtp: resultado.carpeta,
+        ultimaVerificacion: new Date().toISOString(),
+        ultimoErrorVerificacion: confirmacion.error || (confirmacion.faltantes?.length
+          ? `Faltan archivos: ${confirmacion.faltantes.join(', ')}`
+          : 'El servidor aún no confirma la carga completa.'),
+      });
+      notificar({
+        tipo: 'pendiente_verificacion',
+        id: item.id,
+        carpeta: resultado.carpeta,
+        mensaje: confirmacion.error || 'Subida enviada, esperando confirmación del servidor...',
+      });
+    }
 
   } catch (error) {
     console.error('[QueueWorker] Error en item', item.id, ':', error.message);
@@ -168,6 +214,38 @@ async function procesarItem(item) {
   }
 }
 
+// ── Reverificar un ítem que ya se subió pero el backend no había
+//    confirmado todavía — NO vuelve a subir nada por FTP, solo
+//    re-consulta /validar. ──────────────────────────────────────
+async function reverificarItem(item) {
+  if (_enProceso.has(item.id)) return;
+  _enProceso.add(item.id);
+
+  try {
+    const carpeta = item.carpetaFtp || item.id;
+    const confirmacion = await validarSubidaBackend(carpeta, item.token);
+
+    if (confirmacion.completo) {
+      await actualizarEstado(item.id, ESTADO.COMPLETADO, {
+        completadoEn: new Date().toISOString(),
+      });
+      await borrarArchivosLocales(item.formulario);
+      notificar({ tipo: 'completado', id: item.id, carpeta });
+    } else {
+      await actualizarEstado(item.id, ESTADO.VERIFICANDO, {
+        ultimaVerificacion: new Date().toISOString(),
+        ultimoErrorVerificacion: confirmacion.error || (confirmacion.faltantes?.length
+          ? `Faltan archivos: ${confirmacion.faltantes.join(', ')}`
+          : 'El servidor aún no confirma la carga completa.'),
+      });
+    }
+  } catch (e) {
+    console.warn('[QueueWorker] reverificarItem:', e.message);
+  } finally {
+    _enProceso.delete(item.id);
+  }
+}
+
 // ── Ciclo principal ──────────────────────────────────────────
 async function tick() {
   const conexion = await hayConexion();
@@ -177,6 +255,12 @@ async function tick() {
   }
 
   const cola = await leerCola();
+
+  const verificando = cola.filter(
+    i => i.estado === ESTADO.VERIFICANDO && !_enProceso.has(i.id)
+  );
+  verificando.forEach(item => reverificarItem(item));
+
   const pendientes = cola.filter(
     i => i.estado === ESTADO.PENDIENTE && !_enProceso.has(i.id)
   );
