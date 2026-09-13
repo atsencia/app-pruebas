@@ -19,6 +19,10 @@ import Colors from "@/constants/colors";
 
 const C = Colors.light;
 
+// Igual que en AuthContext.tsx/FtpuploadServices.js: overridable por
+// .env.local (EXPO_PUBLIC_API_BASE) para pruebas contra un backend local.
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE || 'https://187.33.154.112.sslip.io/backend';
+
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login, loginLocal } = useAuth();
@@ -40,7 +44,7 @@ export default function LoginScreen() {
   setError("");
   setIsLoading(true);
   try {
-    const response = await fetch("https://187.33.154.112.sslip.io/backend/logueo/auth/login", {
+    const response = await fetch(`${API_BASE}/logueo/auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
