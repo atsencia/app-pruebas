@@ -10,16 +10,16 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/senciaLogo.png",
+      "image": "./assets/images/splash-brand.png",
       "resizeMode": "contain",
       "backgroundColor": "#1E3A5F"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.myapp"
+      "bundleIdentifier": "com.sencia.vecindad"
     },
     "android": {
-      "package": "com.myapp",
+      "package": "com.sencia.vecindad",
       "adaptiveIcon": {
         "backgroundColor": "#1E3A5F",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
