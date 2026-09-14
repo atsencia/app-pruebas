@@ -56,7 +56,7 @@ export const useFormStore = create(
 // (Datos del propietario → Acceso vehicular)
 // ─────────────────────────────────────────────
 
-const CAMPOS_TEMPLATE = [
+export const CAMPOS_TEMPLATE = [
   'nombre', 'cedula', 'direccion', 'telefono', 'propCorreo',
   'tieneZona', 'zonaDesc',
   'interNombre', 'interCargo', 'interCorreo',
@@ -118,6 +118,57 @@ export const usePredioTemplates = create(
     }),
     {
       name:    'predio-templates',
+      storage: createJSONStorage(() => AsyncStorage),
+    }
+  )
+);
+
+// ─────────────────────────────────────────────
+// LOTE MOVISTAR ARENA
+// (cabecera compartida entre la acta madre y sus zonas)
+// ─────────────────────────────────────────────
+
+export const CODIGO_PROYECTO_MOVISTAR = 'movistar_arena_2025';
+
+// Cabecera del lote = CAMPOS_TEMPLATE sin tieneZona/zonaDesc,
+// que son específicos de cada zona y no deben compartirse.
+export const CAMPOS_CABECERA_LOTE = CAMPOS_TEMPLATE.filter(
+  k => k !== 'tieneZona' && k !== 'zonaDesc'
+);
+
+export const useLoteMovistarArena = create(
+  persist(
+    (set, get) => ({
+      // { codigoProyecto, cabecera, iniciadoEn, totalZonas } | null
+      loteActivo: null,
+
+      // Se llama al enviar la ACTA MADRE: fija la cabecera del lote.
+      iniciarLote: (formData) => {
+        const cabecera = {};
+        CAMPOS_CABECERA_LOTE.forEach(k => { cabecera[k] = formData[k]; });
+        set({
+          loteActivo: {
+            codigoProyecto: formData.codigoProyecto || CODIGO_PROYECTO_MOVISTAR,
+            cabecera,
+            iniciadoEn: new Date().toISOString(),
+            totalZonas: 0,
+          },
+        });
+      },
+
+      // Se llama al enviar cada ZONA del lote.
+      registrarZonaSubida: () => set(s => (
+        s.loteActivo
+          ? { loteActivo: { ...s.loteActivo, totalZonas: s.loteActivo.totalZonas + 1 } }
+          : s
+      )),
+
+      getCabeceraParaForm: () => get().loteActivo?.cabecera ?? null,
+
+      cerrarLote: () => set({ loteActivo: null }),
+    }),
+    {
+      name:    'lote-movistar-arena',
       storage: createJSONStorage(() => AsyncStorage),
     }
   )

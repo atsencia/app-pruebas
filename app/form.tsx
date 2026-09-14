@@ -27,7 +27,8 @@ import { useLocalSearchParams } from "expo-router";
 import { useFormStore, useBorradores  } from '../store/zustand-state';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
 import QueueStatusBar from '@/components/QueueStatusBar';
-import ActasMovistar from '@/components/ActasMovistar';
+import LoteMovistarArena from '@/components/LoteMovistarArena';
+import { useLoteMovistarArena, CODIGO_PROYECTO_MOVISTAR } from '@/store/zustand-state';
 import * as DocumentPicker from 'expo-document-picker';
 import { useBorradoresActions } from '../hooks/useBorradoresActions';
 import { usePredioTemplates } from '@/store/zustand-state';
@@ -309,51 +310,14 @@ export default function FormScreen() {
   const { user, logout } = useAuth();
   const isAdmin = !!user?.isAdmin;  
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const CODIGO_PROYECTO_MOVISTAR = 'movistar_arena_2025';
 
       const { guardar } = useBorradoresActions();
       const { crearDesdeForm } = usePredioTemplates();
+      const { loteActivo, iniciarLote, registrarZonaSubida, cerrarLote } = useLoteMovistarArena();
 
       const [modalBorradorVisible, setModalBorradorVisible]   = useState(false);
       const [modalTemplateVisible, setModalTemplateVisible]   = useState(false);
       const [borradorActivoId,     setBorradorActivoId]       = useState<string | null>(null);
-
-  const handleActaSeleccionada = async (registro_uuid: string) => {
-    try {
-      setLoadingActa(true);
-      const url = `https://187.33.154.112.sslip.io/backend/api/registros/${registro_uuid}/acta`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${user?.token}`,
-        },
-      });
-      console.log(response);
-      if (!response.ok) throw new Error("Error al cargar el acta");
-      const data = await response.json();
-      console.log("📦 Data backend:", data);
-      const registro = Array.isArray(data)
-        ? data[0]
-        : data.registro ?? data.data ?? data.acta ?? data;
-      if (!registro) throw new Error("No se encontraron datos");
-      console.log("✅ Registro normalizado:", registro);
-      setField("nombre",      registro.nombre      || "");
-      setField("cedula",      registro.cedula      || "");
-      setField("direccion",   registro.direccion   || "");
-      setField("tipoActa",    registro.tipo_acta   || "");
-      setField("propCorreo",  registro.prop_correo || "");
-      setField("interCorreo", registro.inter_correo || "");
-      setField("interNombre", registro.inter_nombre || "");
-      setField("interCargo",  registro.inter_cargo  || "");
-      router.push({ pathname: "/form", params: { registro_uuid } });
-    } catch (error: any) {
-      console.error("💥 Error:", error);
-      Alert.alert("Error", error.message || "No se pudo cargar el acta");
-    } finally {
-      setLoadingActa(false);
-    }
-  };
 
   // ── Cargar acta existente ──────────────────
   useEffect(() => {
@@ -444,11 +408,48 @@ export default function FormScreen() {
     setTimeout(() => router.push(route as any), 240);
   };
 
-  const cargarActaMovistar = (uuid: string) => {
+  // ── Lote Movistar Arena ─────────────────────
+  const nuevaActaInicialMovistar = () => {
+    const empezar = () => {
+      clearForm();
+      setField('tipoRegistro', 'acta_madre');
+      setField('codigoProyecto', CODIGO_PROYECTO_MOVISTAR);
+      closeSidebar();
+      setTimeout(() => router.replace('/form'), 240);
+    };
+    if (loteActivo && loteActivo.totalZonas > 0) {
+      Alert.alert(
+        'Ya hay un lote activo',
+        `Tiene ${loteActivo.totalZonas} zona(s) subida(s). ¿Iniciar una acta inicial nueva de todas formas?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Continuar', onPress: empezar },
+        ]
+      );
+    } else {
+      empezar();
+    }
+  };
+
+  const nuevaZonaDelLote = () => {
+    if (!loteActivo) return;
+    clearForm();
+    setField('tipoRegistro', 'zona_proyecto');
+    setField('codigoProyecto', loteActivo.codigoProyecto);
+    Object.entries(loteActivo.cabecera).forEach(([k, v]) => setField(k, v));
     closeSidebar();
-    setTimeout(() => {
-      router.push({ pathname: '/form', params: { registro_uuid: uuid } } as any);
-    }, 240);
+    setTimeout(() => router.replace('/form'), 240);
+  };
+
+  const cerrarLoteMovistar = () => {
+    Alert.alert(
+      'Cerrar lote',
+      'Esto no afecta las actas ya subidas, solo el atajo del sidebar.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cerrar lote', style: 'destructive', onPress: cerrarLote },
+      ]
+    );
   };
 
   // ── Estado del formulario ──────────────────
@@ -606,6 +607,15 @@ export default function FormScreen() {
         revisado_por:  user?.username ?? null,
       };
       await agregarALaCola(formulario);
+      if (esMadre && form.codigoProyecto === CODIGO_PROYECTO_MOVISTAR) {
+        iniciarLote(form);
+      } else if (
+        esZona &&
+        form.codigoProyecto === CODIGO_PROYECTO_MOVISTAR &&
+        loteActivo?.codigoProyecto === form.codigoProyecto
+      ) {
+        registrarZonaSubida();
+      }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.push({
         pathname: '/success',
@@ -722,31 +732,29 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
  
 </View>
 
-    {!esZona && (
-         <View style={styles.tipoActaCard}>
-          <Text style={styles.tipoActaLabel}>TIPO DE ACTA</Text>
-          <View style={styles.tipoActaRow}>
-            {TIPO_ACTA_OPTIONS.map((opt) => {
-              const active = form.tipoActa === opt.value;
-              return (
-                <Pressable
-                  key={opt.value}
-                  style={({ pressed }) => [
-                    styles.tipoActaBtn,
-                    active && styles.tipoActaBtnActive,
-                    pressed && { opacity: 0.8 },
-                  ]}
-                  onPress={() => set("tipoActa", opt.value)}
-                >
-                  <Text style={[styles.tipoActaBtnText, active && styles.tipoActaBtnTextActive]}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-    )}
+    <View style={styles.tipoActaCard}>
+      <Text style={styles.tipoActaLabel}>TIPO DE ACTA</Text>
+      <View style={styles.tipoActaRow}>
+        {TIPO_ACTA_OPTIONS.map((opt) => {
+          const active = form.tipoActa === opt.value;
+          return (
+            <Pressable
+              key={opt.value}
+              style={({ pressed }) => [
+                styles.tipoActaBtn,
+                active && styles.tipoActaBtnActive,
+                pressed && { opacity: 0.8 },
+              ]}
+              onPress={() => set("tipoActa", opt.value)}
+            >
+              <Text style={[styles.tipoActaBtnText, active && styles.tipoActaBtnTextActive]}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
 
         {/* 1. DATOS DEL PROPIETARIO, */}
 
@@ -754,7 +762,6 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         onAplicar={handleAplicarTemplate}
         onGuardarActual={() => setModalTemplateVisible(true)}
       /> */}
-       {!esZona && (
          <CollapsibleSection
           icon="user"
           title="Datos del Propietario"
@@ -837,41 +844,43 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             />
           </Field>    
 
-          {/* ZONA / APARTAMENTO */}
-          <ToggleField
-            label="¿El predio se divide en zonas / apartamentos?"
-            value={form.tieneZona ?? false}
-            onChange={(v) => { set("tieneZona", v); if (!v) set("zonaDesc", ""); }}
-          />
-          {form.tieneZona && (
-            <View style={styles.zonaContainer}>
-              <View style={{ flex: 1, gap: 6 }}>
-                <TextInput
-                  style={[styles.input, styles.zonaInput]}
-                  placeholder="Ej. Torre 1 Apto 234 / Zona B"
-                  placeholderTextColor={C.textSecondary}
-                  value={form.zonaDesc ?? ""}
-                  onChangeText={(v) => set("zonaDesc", v)}
-                />
-                {form.zonaDesc?.trim() ? (
-                  <View style={styles.zonaPreview}>
-                    <Feather name="eye" size={11} color={C.primary} />
-                    <Text style={styles.zonaPreviewText} numberOfLines={2}>
-                      Se enviará como: {form.direccion.trim()
-                        ? `${form.direccion.trim()}, ${form.zonaDesc.trim()}`
-                        : form.zonaDesc.trim()}
-                    </Text>
+          {/* ZONA / APARTAMENTO — no aplica dentro de una acta "Por Zona" */}
+          {!esZona && (
+            <>
+              <ToggleField
+                label="¿El predio se divide en zonas / apartamentos?"
+                value={form.tieneZona ?? false}
+                onChange={(v) => { set("tieneZona", v); if (!v) set("zonaDesc", ""); }}
+              />
+              {form.tieneZona && (
+                <View style={styles.zonaContainer}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <TextInput
+                      style={[styles.input, styles.zonaInput]}
+                      placeholder="Ej. Torre 1 Apto 234 / Zona B"
+                      placeholderTextColor={C.textSecondary}
+                      value={form.zonaDesc ?? ""}
+                      onChangeText={(v) => set("zonaDesc", v)}
+                    />
+                    {form.zonaDesc?.trim() ? (
+                      <View style={styles.zonaPreview}>
+                        <Feather name="eye" size={11} color={C.primary} />
+                        <Text style={styles.zonaPreviewText} numberOfLines={2}>
+                          Se enviará como: {form.direccion.trim()
+                            ? `${form.direccion.trim()}, ${form.zonaDesc.trim()}`
+                            : form.zonaDesc.trim()}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
-                ) : null}
-              </View>
-            </View>
+                </View>
+              )}
+            </>
           )}
         </CollapsibleSection>
-       )}
 
         {/* 2. INTERVENTORÍA */}
-        {!esZona && (
-           <Section icon="briefcase" title="Interventoría">
+        <Section icon="briefcase" title="Interventoría">
           <InfoBox text="Datos del representante delegado. Esta información se guardará en observaciones del acta." />
           <Field label="Nombre del delegado">
             <TextInput style={styles.input} placeholder="Nombre y apellidos" placeholderTextColor={C.textSecondary}
@@ -887,10 +896,8 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               keyboardType="email-address" autoCapitalize="none" />
           </Field>
         </Section>
-        )}
 
         {/* 3. DATOS DEL PREDIO */}
-{!esZona && (
           <Section icon="home" title="Datos del Predio">
           <View style={styles.row}>
             <View style={styles.rowHalf}>
@@ -923,7 +930,6 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           <View style={styles.divider} />
           <ToggleField label="¿Está ocupada actualmente?" value={form.estaOcupada} onChange={(v) => set("estaOcupada", v)} />
         </Section>
-)}
         {/* 4-B. UBICACIÓN Y ZONA — solo visible si ES zona */}
         {esZona && (
           <Section icon="map-pin" title="Ubicación de la Zona">
@@ -950,7 +956,6 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           </Section>
         )}
         {/* 4. INSPECCIÓN DE FACHADA Y UBICACIÓN */}
-    {!esZona && (
           <CollapsibleSection
           icon="map"
           title="Fachada y Ubicación"
@@ -964,13 +969,18 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           emptyLabel="Sin georef ni fotos"
         >
           <InfoBox text="Registra la ubicación del predio, el estado exterior, y adjunta las fotografías de fachada." />
-          <View style={styles.fachadaSubHeader}>
-            <View style={styles.fachadaSubIconBg}><Feather name="map-pin" size={12} color={C.primary} /></View>
-            <Text style={styles.fachadaSubTitle}>Georeferenciación</Text>
-          </View>
-          <MapPicker latitud={form.latitud} longitud={form.longitud}
-            onLocationChange={(lat, lng) => { setField("latitud", lat); setField("longitud", lng); }} />
-          <View style={styles.fachadaDivider} />
+          {/* Georeferenciación — no aplica en "Por Zona", ya tiene su propio mapa arriba */}
+          {!esZona && (
+            <>
+              <View style={styles.fachadaSubHeader}>
+                <View style={styles.fachadaSubIconBg}><Feather name="map-pin" size={12} color={C.primary} /></View>
+                <Text style={styles.fachadaSubTitle}>Georeferenciación</Text>
+              </View>
+              <MapPicker latitud={form.latitud} longitud={form.longitud}
+                onLocationChange={(lat, lng) => { setField("latitud", lat); setField("longitud", lng); }} />
+              <View style={styles.fachadaDivider} />
+            </>
+          )}
           <View style={styles.fachadaSubHeader}>
             <View style={styles.fachadaSubIconBg}><Feather name="grid" size={12} color={C.primary} /></View>
             <Text style={styles.fachadaSubTitle}>Acabados y Estado de Fachada</Text>
@@ -995,10 +1005,8 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           </Text>
           <PhotoPickerSection photos={form.fotosFachada} onPhotosChange={(fotos) => set("fotosFachada", fotos)} />
         </CollapsibleSection>
-    )}
 
         {/* 5. SERVICIOS PÚBLICOS */}
- {!esZona && (
          <Section icon="zap" title="Servicios Públicos">
           <InfoBox text="Seleccione el estado de cada servicio. En 'Otros' describa servicios adicionales." />
           <View style={styles.servicesGrid}>
@@ -1017,10 +1025,8 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             </View>
           </View>
         </Section>
- )}
 
         {/* 6. USO ACTUAL */}
-{!esZona && (
           <Section icon="layers" title="Uso Actual del Predio">
           <InfoBox text="Seleccione el uso. Sin selección se enviará como 'N/A'." />
           {USOS_ACTUALES.map(({ key, label }) => (
@@ -1033,10 +1039,8 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             </View>
           ))}
         </Section>
-)}
 
         {/* 7. ACCESO VEHICULAR */}
-{!esZona && (
           <Section icon="truck" title="Acceso Vehicular">
           <ToggleField label="¿Tiene garaje?" value={form.tieneGaraje} onChange={(v) => set("tieneGaraje", v)} />
           {form.tieneGaraje && (
@@ -1076,7 +1080,6 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               value={form.anchoAccesoVehicular} onChangeText={(v) => set("anchoAccesoVehicular", v)} keyboardType="decimal-pad" />
           </Field>
         </Section>
-)}
 
         {/* 8. EVALUACIÓN ESTRUCTURAL */}
   {!esMadre &&(
@@ -1199,7 +1202,6 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
 )}
 
         {/* 13. FIRMA — DUEÑO DEL PREDIO */}
-  {!esZona && (
             <FirmaSection icon="home" title="Firma del Dueño del Predio" signed={!!form.firmaPropietarioPredio.firma}>
           <InfoBox text="Datos de contacto y firma manuscrita del propietario o residente del predio." />
           <View style={styles.row}>
@@ -1234,7 +1236,6 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
             </View>
           )}
         </FirmaSection>
-  )}
 
         {/* 14. FIRMA — CONCESIONARIO */}
         <FirmaSection icon="award" title="Representante Delegado Sencia S.A.S." signed={!!form.firmaConcesionario.firma}>
@@ -1398,8 +1399,13 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
 
         <View style={styles.sidebarDivider} />
 
-        {/* ★ Actas Movistar — AQUÍ, dentro del sidebar ★ */}
-        {/* <ActasMovistar onActaSeleccionada={handleActaSeleccionada} /> */}
+        {/* ★ Movistar Arena — lote de actas con cabecera compartida ★ */}
+        <LoteMovistarArena
+          loteActivo={loteActivo}
+          onNuevaActaInicial={nuevaActaInicialMovistar}
+          onNuevaZona={nuevaZonaDelLote}
+          onCerrarLote={cerrarLoteMovistar}
+        />
 
         <View style={styles.sidebarDivider} />
 

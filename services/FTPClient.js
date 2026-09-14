@@ -117,12 +117,16 @@ async _subirArchivoDesdeURIInterno(uriLocal, rutaRemota, onProgreso = null) {
 
   const { host: dataHost, port: dataPort } = await this._entrarModoPasivo();
   const espera150 = this._waitForAnyCode(['125', '150']);
-  const espera226 = this._waitForCode('226', TIMEOUT_TRANSFER);
+  const { promise: espera226, tocar: tocarActividad } =
+    this._esperarCodigoConInactividad('226', TIMEOUT_TRANSFER);
   const { socket: dataSocket, conectado } = this._crearSocketDatos(dataHost, dataPort);
   this._enviarLinea(`STOR ${rutaRemota}`);
 
   await Promise.all([conectado, espera150]);
-  await this._enviarChunksPorSocket(dataSocket, uriLocal, totalBytes, onProgreso);
+  await this._enviarChunksPorSocket(dataSocket, uriLocal, totalBytes, (enviados, total) => {
+    tocarActividad();
+    if (typeof onProgreso === 'function') onProgreso(enviados, total);
+  });
   await espera226;
   log(`✅ Archivo subido desde URI: ${rutaRemota}`);
 }
@@ -235,6 +239,36 @@ async _subirArchivoDesdeURIInterno(uriLocal, rutaRemota, onProgreso = null) {
       this._waiters.push(waiter);
       this._procesarBuffer();
     });
+  }
+
+  // ✅ Como _waitForCode, pero el timeout se reinicia cada vez que se
+  // llama a `tocar()` en lugar de correr desde que se arma la espera.
+  // Se usa para el código 226 en transferencias de archivos grandes:
+  // un timeout fijo de 5 min mata subidas legítimas que en redes
+  // lentas tardan más que eso en completarse aunque sigan avanzando
+  // byte a byte. Con inactividad, solo falla si de verdad se cuelga.
+  _esperarCodigoConInactividad(codigo, timeoutInactividad) {
+    const waiter = { code: codigo, timer: null, resolve: null, reject: null };
+
+    const promise = new Promise((resolve, reject) => {
+      waiter.resolve = resolve;
+      waiter.reject  = reject;
+    });
+
+    const tocar = () => {
+      clearTimeout(waiter.timer);
+      waiter.timer = setTimeout(() => {
+        this._waiters = this._waiters.filter(w => w !== waiter);
+        waiter.reject(new Error(
+          `Timeout esperando código FTP ${codigo} (sin actividad ${timeoutInactividad / 1000}s)`
+        ));
+      }, timeoutInactividad);
+    };
+
+    tocar();
+    this._waiters.push(waiter);
+    this._procesarBuffer();
+    return { promise, tocar };
   }
 
   _waitForAnyCode(codigos, timeout = TIMEOUT_COMANDO) {

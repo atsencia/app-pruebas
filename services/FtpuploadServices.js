@@ -3,18 +3,21 @@ import * as FileSystem from 'expo-file-system/legacy';
 import FTPClient from './FTPClient';
 import { Buffer } from 'buffer';
 
+// Overridable por .env.local (EXPO_PUBLIC_* — Expo las inyecta en el bundle)
+// para poder probar contra un FTP/backend local sin tocar estos defaults,
+// que son los de producción.
 const FTP_CONFIG = {
-  host: '187.33.154.112',
-  port: 21,
-  user: 'ftpuser',
-  password: 'Sencia2026AT',
-  baseDir: '/home/ftpuser/uploads',
+  host:     process.env.EXPO_PUBLIC_FTP_HOST     || '187.33.154.112',
+  port:     Number(process.env.EXPO_PUBLIC_FTP_PORT) || 21,
+  user:     process.env.EXPO_PUBLIC_FTP_USER     || 'ftpuser',
+  password: process.env.EXPO_PUBLIC_FTP_PASSWORD || 'Sencia2026AT',
+  baseDir:  process.env.EXPO_PUBLIC_FTP_BASEDIR  || '/home/ftpuser/uploads',
 };
 
 // Mismo backend que usa AuthContext — confirma contra el servidor que la
 // carpeta subida por FTP quedó completa (existe .done + toda la multimedia
 // listada en datos.json), en vez de asumir éxito solo porque el FTP no tiró error.
-const API_BASE = 'https://187.33.154.112.sslip.io/backend';
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE || 'https://187.33.154.112.sslip.io/backend';
 
 export async function validarSubidaBackend(carpeta, token) {
   try {

@@ -11,6 +11,7 @@
     TextInput,
   } from "react-native";
   import * as ImagePicker from "expo-image-picker";
+  import * as DocumentPicker from "expo-document-picker";
   import * as FileSystem from "expo-file-system/legacy";
   import * as Haptics from "expo-haptics";
   import { Feather } from "@expo/vector-icons";
@@ -134,6 +135,39 @@
   }
     };
 
+    // Picker nativo de archivos — en Android muestra Google Drive (y cualquier
+    // otro proveedor en la nube instalado) como origen gracias al Storage
+    // Access Framework, sin necesitar la API de Google ni OAuth.
+    const pickFromDrive = async () => {
+      if (hasLimit && currentCount >= maxPhotos!) {
+        Alert.alert("Límite alcanzado", `Máximo ${maxPhotos} fotos permitidas.`);
+        return;
+      }
+
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "image/*",
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      let assets = result.assets ?? [];
+      const disponibles = hasLimit ? maxPhotos! - currentCount : assets.length;
+      if (hasLimit && assets.length > disponibles) {
+        Alert.alert(
+          "Límite alcanzado",
+          `Solo se agregaron ${disponibles} de ${assets.length} archivos (máximo ${maxPhotos} fotos).`
+        );
+        assets = assets.slice(0, disponibles);
+      }
+
+      const cacheUris = await Promise.all(
+        assets.map((a) => copiarAlCache(a.uri))
+      );
+      cacheUris.forEach((uri) => procesarFoto(uri)); // ← encola en WatermarkProcessor
+    };
+
     const pickFromCamera = async () => {
       if (hasLimit && currentCount >= maxPhotos!) {
         Alert.alert("Límite alcanzado", `Máximo ${maxPhotos} fotos permitidas.`);
@@ -168,6 +202,7 @@
       Alert.alert("Agregar foto", "Selecciona el origen", [
         { text: "Cámara",   onPress: pickFromCamera  },
         { text: "Galería",  onPress: pickFromGallery },
+        { text: "Drive / Archivos", onPress: pickFromDrive },
         { text: "Cancelar", style: "cancel"          },
       ]);
     };
@@ -193,6 +228,10 @@
               <View style={styles.emptyChip}>
                 <Feather name="image" size={12} color={C.primary} />
                 <Text style={styles.emptyChipText}>Galería</Text>
+              </View>
+              <View style={styles.emptyChip}>
+                <Feather name="cloud" size={12} color={C.primary} />
+                <Text style={styles.emptyChipText}>Drive</Text>
               </View>
             </View>
           </Pressable>

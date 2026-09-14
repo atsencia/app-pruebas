@@ -254,7 +254,31 @@ async function tick() {
     return;
   }
 
-  const cola = await leerCola();
+  let cola = await leerCola();
+
+  // ── Recuperar ítems huérfanos ─────────────────────────────
+  // Un ítem queda en SUBIENDO solo mientras su promesa de subida
+  // sigue corriendo en _enProceso. Si la app se cerró o el SO la
+  // mató a mitad de una transferencia larga (ej. video pesado),
+  // la promesa nunca resuelve ni rechaza: el ítem queda grabado
+  // como SUBIENDO en AsyncStorage para siempre y jamás se retoma,
+  // porque tick() solo mira pendientes/verificando.
+  // Al reiniciar, _enProceso arranca vacío, así que cualquier
+  // ítem en SUBIENDO que no esté ahí es huérfano de una sesión
+  // anterior: se reencola (respetando el máximo de reintentos).
+  const huerfanos = cola.filter(
+    i => i.estado === ESTADO.SUBIENDO && !_enProceso.has(i.id)
+  );
+  if (huerfanos.length > 0) {
+    for (const item of huerfanos) {
+      await incrementarReintentos(
+        item.id,
+        'Subida interrumpida (la app se cerró o pasó a segundo plano durante la transferencia). Reintentando...'
+      );
+      notificar({ tipo: 'huerfano_recuperado', id: item.id });
+    }
+    cola = await leerCola();
+  }
 
   const verificando = cola.filter(
     i => i.estado === ESTADO.VERIFICANDO && !_enProceso.has(i.id)

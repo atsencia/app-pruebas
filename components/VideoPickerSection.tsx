@@ -7,10 +7,12 @@ import {
   Pressable,
   Alert,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
+import { Video as VideoCompressor } from "react-native-compressor";
 import Colors from "@/constants/colors";
 
 const C = Colors.light;
@@ -20,6 +22,9 @@ export interface VideoItem {
   thumbnail: string | null;
   duration: number | null;
   filename: string;
+  // true mientras se está comprimiendo antes de subir. Si la
+  // compresión falla, se sube el archivo original sin bloquear nada.
+  procesando?: boolean;
 }
 
 interface Props {
@@ -38,6 +43,37 @@ function formatDuration(ms: number | null): string {
 export default function VideoPickerSection({ videos, onVideosChange }: Props) {
   const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
   const [mediaPermission, requestMediaPermission] = ImagePicker.useMediaLibraryPermissions();
+
+  // Siempre refleja el último `videos` recibido por props, para poder
+  // actualizar un ítem puntual cuando termina su compresión en segundo
+  // plano sin depender de un closure viejo de la lista.
+  const videosRef = React.useRef(videos);
+  React.useEffect(() => { videosRef.current = videos; }, [videos]);
+
+  // Comprime un video recién agregado y reemplaza su uri original por
+  // la versión comprimida. Un video de varios minutos sin comprimir
+  // puede pesar cientos de MB a GB, lo que hace la subida por FTP
+  // muchísimo más lenta y propensa a que el SO mate la app a mitad de
+  // camino. Si la compresión falla (formato raro, dispositivo viejo),
+  // no se bloquea nada: se sube el archivo original.
+  const comprimirYReemplazar = async (uriOriginal: string) => {
+    try {
+      const uriComprimido = await VideoCompressor.compress(
+        uriOriginal,
+        { compressionMethod: "auto" },
+      );
+      const actualizados = videosRef.current.map((v) =>
+        v.uri === uriOriginal ? { ...v, uri: uriComprimido, procesando: false } : v
+      );
+      onVideosChange(actualizados);
+    } catch (e: any) {
+      console.warn("[VideoPicker] Compresión falló, se sube el original:", e?.message);
+      const actualizados = videosRef.current.map((v) =>
+        v.uri === uriOriginal ? { ...v, procesando: false } : v
+      );
+      onVideosChange(actualizados);
+    }
+  };
 
   const pickFromGallery = async () => {
     if (Platform.OS !== "web" && !mediaPermission?.granted) {
@@ -60,10 +96,12 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
         thumbnail: null,
         duration: asset.duration ?? null,
         filename: asset.fileName ?? `video_${Date.now()}.mp4`,
+        procesando: true,
       }));
 
       onVideosChange([...videos, ...nuevos]);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      nuevos.forEach((v) => comprimirYReemplazar(v.uri));
     }
   };
 
@@ -90,10 +128,12 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
         thumbnail: null,
         duration: asset.duration ?? null,
         filename: asset.fileName ?? `video_${Date.now()}.mp4`,
+        procesando: true,
       };
 
       onVideosChange([...videos, nuevo]);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      comprimirYReemplazar(nuevo.uri);
     }
   };
 
@@ -142,8 +182,17 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
                   </View>
                 )}
                 <View style={styles.videoStatusBadge}>
-                  <Feather name="check-circle" size={11} color={C.accent} />
-                  <Text style={styles.videoStatusText}>Listo</Text>
+                  {video.procesando ? (
+                    <>
+                      <ActivityIndicator size="small" color={C.primary} />
+                      <Text style={styles.videoStatusText}>Comprimiendo...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Feather name="check-circle" size={11} color={C.accent} />
+                      <Text style={styles.videoStatusText}>Listo</Text>
+                    </>
+                  )}
                 </View>
               </View>
 
