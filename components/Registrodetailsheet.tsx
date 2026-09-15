@@ -135,6 +135,7 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
 
         {/* Botones */}
         <View style={styles.actions}>
+          {/* Enviar link al dueño del predio — comentado a pedido
           <Pressable
             style={({ pressed }) => [
               styles.actionBtn,
@@ -154,7 +155,9 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
               {sending === "prop" ? "Enviando..." : "Enviar link al dueño del predio"}
             </Text>
           </Pressable>
+          */}
 
+          {/* Enviar link a interventoría — comentado a pedido
           <Pressable
             style={({ pressed }) => [
               styles.actionBtn,
@@ -174,6 +177,7 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
               {sending === "inter" ? "Enviando..." : "Enviar link a interventoría"}
             </Text>
           </Pressable>
+          */}
 
           {/* Botón editar acta */}
             <Pressable
