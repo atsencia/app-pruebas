@@ -17,6 +17,7 @@ import Colors from "@/constants/colors";
 import RegistroCard from "@/components/RegistroCard";
 import RegistroDetailSheet from "@/components/Registrodetailsheet";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_BASE } from "@/constants/api";
 
 const C = Colors.light;
 
@@ -60,7 +61,7 @@ export default function SearchScreen() {
     try {
 console.log("USER COMPLETO:", JSON.stringify(user));      
 
-const url = `https://187.33.154.112.sslip.io/backend/api/registros/buscar?q=${encodeURIComponent(q)}`;
+const url = `${API_BASE}/api/registros/buscar?q=${encodeURIComponent(q)}`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -95,7 +96,7 @@ const url = `https://187.33.154.112.sslip.io/backend/api/registros/buscar?q=${en
   setLoading(true);
   setError(null);
   try {
-    const url = `https://187.33.154.112.sslip.io/backend/api/registros/devueltos`;
+    const url = `${API_BASE}/api/registros/devueltos`;
     const response = await fetch(url, {
       method: "GET",
       headers: {

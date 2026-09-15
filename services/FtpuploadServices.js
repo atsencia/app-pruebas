@@ -2,6 +2,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import FTPClient from './FTPClient';
 import { Buffer } from 'buffer';
+import { API_BASE } from '../constants/api';
 
 // Overridable por .env.local (EXPO_PUBLIC_* — Expo las inyecta en el bundle)
 // para poder probar contra un FTP/backend local sin tocar estos defaults,
@@ -13,11 +14,6 @@ const FTP_CONFIG = {
   password: process.env.EXPO_PUBLIC_FTP_PASSWORD || 'Sencia2026AT',
   baseDir:  process.env.EXPO_PUBLIC_FTP_BASEDIR  || '/home/ftpuser/uploads',
 };
-
-// Mismo backend que usa AuthContext — confirma contra el servidor que la
-// carpeta subida por FTP quedó completa (existe .done + toda la multimedia
-// listada en datos.json), en vez de asumir éxito solo porque el FTP no tiró error.
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE || 'https://187.33.154.112.sslip.io/backend';
 
 export async function validarSubidaBackend(carpeta, token) {
   try {

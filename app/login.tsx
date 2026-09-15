@@ -16,12 +16,9 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useAuth } from "@/contexts/AuthContext";
 import Colors from "@/constants/colors";
+import { API_BASE } from "@/constants/api";
 
 const C = Colors.light;
-
-// Igual que en AuthContext.tsx/FtpuploadServices.js: overridable por
-// .env.local (EXPO_PUBLIC_API_BASE) para pruebas contra un backend local.
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE || 'https://187.33.154.112.sslip.io/backend';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();

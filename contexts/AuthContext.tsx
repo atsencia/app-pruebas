@@ -7,6 +7,7 @@ import React, {
   ReactNode,
 } from "react";
 import * as SecureStore from "expo-secure-store";
+import { API_BASE } from "@/constants/api";
 
 interface User {
   username: string;
@@ -26,9 +27,6 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const TOKEN_KEY = "auth_token";
 const USER_KEY  = "auth_user";
-// Overridable por .env.local (EXPO_PUBLIC_API_BASE) para pruebas contra un
-// backend local — ver services/FtpuploadServices.js, mismo mecanismo.
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE || 'https://187.33.154.112.sslip.io/backend';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);

@@ -23,6 +23,7 @@ import PhotoPickerSection from "@/components/PhotoPickerSection";
 import VideoPickerSection from "@/components/VideoPickerSection";
 import ToggleField from "@/components/ToggleField";
 import Colors from "@/constants/colors";
+import { API_BASE } from "@/constants/api";
 import { useLocalSearchParams } from "expo-router";
 import { useFormStore, useBorradores  } from '../store/zustand-state';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
@@ -326,7 +327,7 @@ export default function FormScreen() {
       setLoadingActa(true);
       try {
         const response = await fetch(
-          `https://187.33.154.112.sslip.io/backend/api/registros/${registro_uuid}/acta`,
+          `${API_BASE}/api/registros/${registro_uuid}/acta`,
           { headers: { "Authorization": `Bearer ${user?.token}` } }
         );
         if (!response.ok) throw new Error("No se pudo cargar el acta");

@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, Pressable, StyleSheet, Clipboard, ToastAndroid, Platform, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import type { Registro } from "@/app/search";
+import { API_BASE } from "@/constants/api";
 
 interface Props {
   registro: Registro;
@@ -21,7 +22,7 @@ export default function RegistroCard({ registro, onEnviarLink }: Props) {
     text: "#374151",
   };
 
-  const actaUrl = `http://187.33.154.112.sslip.io/backend/acta.html?id=${registro.carpeta}`;
+  const actaUrl = `${API_BASE}/acta.html?id=${registro.carpeta}`;
 
   const handleCopiarUrl = () => {
     Clipboard.setString(actaUrl);

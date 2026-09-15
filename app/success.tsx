@@ -14,6 +14,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import * as Clipboard from "expo-clipboard";
+import { API_BASE } from "@/constants/api";
 
 const C = Colors.light;
 
@@ -28,7 +29,7 @@ export default function SuccessScreen() {
   enCola: string;
 }>();
 
-const actaUrl = `http://187.33.154.112.sslip.io/backend/acta.html?id=${numeroRegistro}`;
+const actaUrl = `${API_BASE}/acta.html?id=${numeroRegistro}`;
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;

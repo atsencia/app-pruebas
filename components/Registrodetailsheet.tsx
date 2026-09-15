@@ -14,6 +14,7 @@ import type { Registro } from "@/app/search";
 // import { getApiUrl } from "@/lib/query-client"; // descomenta cuando uses fetch real
 import { useAuth } from "@/contexts/AuthContext";
 import { router } from "expo-router";
+import { API_BASE } from "@/constants/api";
 
 interface Props {
   visible: boolean;
@@ -42,7 +43,7 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
 
     try {
       const response = await fetch(
-        `https://187.33.154.112.sslip.io/backend/api/registros/${registro.registro_uuid}/enviar-firma`,
+        `${API_BASE}/api/registros/${registro.registro_uuid}/enviar-firma`,
         {
           method: "POST",
           headers: {

@@ -10,12 +10,29 @@ import {
   ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 import { Video as VideoCompressor } from "react-native-compressor";
 import Colors from "@/constants/colors";
 
 const C = Colors.light;
+
+// Copia el video al directorio cache de la app antes de exponer su uri al
+// resto del flujo (compresión + FTPClient). Evita que expo-file-system
+// tenga que leer directo desde content://, que en Android 13+ puede
+// disparar permisos extra o simplemente no ser legible por VideoCompressor.
+async function copiarAlCache(uri: string): Promise<string> {
+  if (!uri.startsWith("content://")) return uri;
+
+  const ext     = uri.split(".").pop()?.split("?")[0] ?? "mp4";
+  const nombre  = `video_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const destino = `${FileSystem.cacheDirectory}${nombre}`;
+
+  await FileSystem.copyAsync({ from: uri, to: destino });
+  return destino;
+}
 
 export interface VideoItem {
   uri: string;
@@ -60,7 +77,16 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
     try {
       const uriComprimido = await VideoCompressor.compress(
         uriOriginal,
-        { compressionMethod: "auto" },
+        {
+          compressionMethod: "auto",
+          // Más agresivo que el default (maxSize 640 sin límite de bitrate):
+          // estos son videos de inspección/documentación, no necesitan
+          // calidad de cámara. maxSize 480 + techo de bitrate reducen
+          // bastante el peso final, lo que achica el tiempo de subida
+          // por FTP — el cuello de botella real con videos largos.
+          maxSize: 480,
+          bitrate: 1_500_000, // ~1.5 Mbps
+        },
       );
       const actualizados = videosRef.current.map((v) =>
         v.uri === uriOriginal ? { ...v, uri: uriComprimido, procesando: false } : v
@@ -137,6 +163,33 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
     }
   };
 
+  // Picker nativo de archivos — en Android muestra Google Drive (y cualquier
+  // otro proveedor en la nube instalado) como origen gracias al Storage
+  // Access Framework, igual que ya hace PhotoPickerSection para fotos.
+  const pickFromDrive = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "video/*",
+      multiple: true,
+      copyToCacheDirectory: true,
+    });
+
+    if (result.canceled || !result.assets?.length) return;
+
+    const nuevos: VideoItem[] = await Promise.all(
+      result.assets.map(async (asset) => ({
+        uri: await copiarAlCache(asset.uri),
+        thumbnail: null,
+        duration: null,
+        filename: asset.name ?? `video_${Date.now()}.mp4`,
+        procesando: true,
+      }))
+    );
+
+    onVideosChange([...videos, ...nuevos]);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    nuevos.forEach((v) => comprimirYReemplazar(v.uri));
+  };
+
   const removeVideo = async (index: number) => {
     onVideosChange(videos.filter((_, i) => i !== index));
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -150,6 +203,7 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
     Alert.alert("Agregar Video", "Selecciona el origen", [
       { text: "🎥 Grabar con Cámara", onPress: pickFromCamera },
       { text: "📁 Galería", onPress: pickFromGallery },
+      { text: "☁️ Drive / Archivos", onPress: pickFromDrive },
       { text: "Cancelar", style: "cancel" },
     ]);
   };
@@ -234,6 +288,10 @@ export default function VideoPickerSection({ videos, onVideosChange }: Props) {
             <View style={styles.emptyChip}>
               <Feather name="folder" size={12} color={C.primary} />
               <Text style={styles.emptyChipText}>Galería</Text>
+            </View>
+            <View style={styles.emptyChip}>
+              <Feather name="cloud" size={12} color={C.primary} />
+              <Text style={styles.emptyChipText}>Drive</Text>
             </View>
           </View>
         </Pressable>

@@ -62,7 +62,9 @@ class OsmMapView(context: Context) : MapView(context) {
         super.onAttachedToWindow()
         onResume()
         controller.setZoom(15.0)
-        controller.setCenter(GeoPoint(4.677391, -74.062609))
+        // Estadio Nemesio Camacho El Campín — centro por defecto cuando aún
+        // no hay una ubicación capturada para el registro.
+        controller.setCenter(GeoPoint(4.648, -74.077))
     }
 
     override fun onDetachedFromWindow() {

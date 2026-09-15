@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/contexts/AuthContext";
 import Colors from "@/constants/colors";
+import { API_BASE } from "@/constants/api";
 
 const C = Colors.light;
 
@@ -36,7 +37,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-const API = "https://187.33.154.112.sslip.io/backend/api/users";
+const API = `${API_BASE}/api/users`;
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 

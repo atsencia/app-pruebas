@@ -455,7 +455,12 @@ async _subirArchivoDesdeURIInterno(uriLocal, rutaRemota, onProgreso = null) {
         reject(err);
       });
 
-      const CHUNK_BYTES = 192 * 1024;
+      // 768 KB en vez de 192 KB: cada chunk pasa por FileSystem.readAsStringAsync
+      // (lee + codifica base64 del lado nativo) y ese viaje por el puente tiene
+      // overhead fijo por llamada. Con chunks 4x más grandes, un video de 50 MB
+      // pasa de ~260 llamadas a ~65 — menos overhead acumulado sin perder el
+      // backpressure real que ya maneja el resto de esta función.
+      const CHUNK_BYTES = 768 * 1024;
       let bytesSent   = 0;
       let offsetBytes = 0;
 
