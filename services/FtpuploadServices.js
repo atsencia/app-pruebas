@@ -237,14 +237,18 @@ async function construirListaMultimedia(formulario) {
       }
     }
   }
-  // ── Plano topográfico (PDF) ──────────────────────────
-  const plano = extra.planTopograficoArchivo;
-  if (plano?.uri) {
+  // ── Documentación adicional (PDF, Word, Excel, imágenes) ─────────────
+  const documentos = formulario.documentosAdicionales || [];
+  for (let i = 0; i < documentos.length; i++) {
+    const doc = documentos[i];
+    const uri = doc.uri ?? doc;
+    if (!esURILocal(uri)) continue;
+    const nombreRemoto = `documento_${String(i + 1).padStart(3, '0')}.${extDeURI(uri, 'pdf')}`;
     lista.push({
-      uriLocal:     plano.uri,
-      nombreRemoto: 'plano_topografico.pdf',
+      uriLocal:     uri,
+      nombreRemoto,
       categoria:    'documentos',
-      descripcion:  'Plano de ubicación topográfica',
+      descripcion:  doc.descripcion || doc.nombre || `Documento ${i + 1}`,
       esTemporal:   false,
     });
   }
@@ -295,10 +299,10 @@ function construirDatosJSON(id, formulario, listaMultimedia) {
         firma: firmaPropNombre,
       },
 
-      planTopograficoArchivo: listaMultimedia.find(a => a.nombreRemoto === 'plano_topografico.pdf')?.nombreRemoto ?? null,
       fotosCount:        listaMultimedia.filter(a => a.categoria === 'fotos').length,
       fotosFachadaCount: listaMultimedia.filter(a => a.categoria === 'fotosFachada').length,
       videosCount:       listaMultimedia.filter(a => a.categoria === 'videos').length,
+      documentosCount:   listaMultimedia.filter(a => a.categoria === 'documentos').length,
     },
 
     multimedia: {

@@ -122,7 +122,7 @@ export interface FormData {
   fotos:        { uri: string; descripcion: string }[];
   fotosFachada: { uri: string; descripcion: string }[];
   videos:       VideoItem[];
-  planTopograficoArchivo: { uri: string; nombre: string } | null;
+  documentosAdicionales: { uri: string; nombre: string; descripcion: string }[];
   tipoRegistro:   'normal' | 'acta_madre' | 'zona_proyecto';
   codigoProyecto: string;
 }
@@ -300,6 +300,11 @@ export default function FormScreen() {
   const { agregarALaCola } = useUploadQueue();
   
   const form      = useFormStore((state: any) => state.formData);
+  // Defensivo: borradores guardados antes de que existiera este campo no lo
+  // tienen (persist de zustand hace merge superficial, no repone campos
+  // nuevos dentro de formData), así que sin esto rompería con un TypeError
+  // al abrir un borrador viejo.
+  const documentosAdicionales: { uri: string; nombre: string; descripcion: string }[] = form.documentosAdicionales ?? [];
   const setField  = useFormStore((state: any) => state.setField);
   const clearForm = useFormStore((state: any) => state.clearForm);
   const totalBorradores = useBorradores((s: any) => s.borradores.filter((b: any) => b.estado === 'borrador').length);
@@ -559,7 +564,6 @@ export default function FormScreen() {
     verticalidad:      showVerticalidad ? form.verticalidad : null,
     verticalidadNotas: form.verticalidadNotas,
     planTopografico:          form.planTopografico,
-    planTopograficoArchivo:   null,
     observacionesProfesional: form.observacionesProfesional,
     firmaPropietario: {
       nombre: (form.nombre    ?? "").trim(),
@@ -603,6 +607,7 @@ export default function FormScreen() {
         fotos:         form.fotos,
         fotosFachada:  form.fotosFachada,
         videos:        form.videos.map((v: any) => ({ uri: v.uri })),
+        documentosAdicionales,
         extra:         buildDatos(), //lo q dice el pana claudio
         registro_uuid: isEditing ? registro_uuid : undefined,
         revisado_por:  user?.username ?? null,
@@ -1133,48 +1138,95 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
     label="Plano de ubicación topográfica radicado"
     description="Incluye predios, vías y demás zonas involucradas en la actividad."
     value={form.planTopografico}
-    onChange={(v) => { set("planTopografico", v); if (!v) set("planTopograficoArchivo", null); }}
+    onChange={(v) => set("planTopografico", v)}
   />
 
-  {form.planTopografico &&!esZona && (
-    <Pressable
-      onPress={async () => {
-        const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf' });
-        if (!result.canceled && result.assets?.[0]) {
-          const { uri, name } = result.assets[0];
-          set("planTopograficoArchivo", { uri, nombre: name });
-        }
-      }}
-      style={{
-        flexDirection: 'row', alignItems: 'center', gap: 10,
-        borderWidth: 1.5, borderStyle: 'dashed',
-        borderColor: form.planTopograficoArchivo ? C.primary : C.border,
-        backgroundColor: form.planTopograficoArchivo ? C.primary + '0D' : C.inputBg,
-        borderRadius: 12, padding: 14,
-      }}
-    >
-      <Feather
-        name={form.planTopograficoArchivo ? 'file-text' : 'upload'}
-        size={18}
-        color={form.planTopograficoArchivo ? C.primary : C.textSecondary}
-      />
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 13, fontFamily: 'Inter_600SemiBold',
-          color: form.planTopograficoArchivo ? C.primary : C.textSecondary }}>
-          {form.planTopograficoArchivo ? form.planTopograficoArchivo.nombre : 'Seleccionar PDF'}
+  {!esZona && (
+    <>
+      <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: C.textSecondary,
+        textTransform: 'uppercase', marginTop: 4 }}>
+        Documentación adicional
+      </Text>
+      <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: C.textSecondary }}>
+        Planos, licencias, permisos u otro soporte del predio (PDF, Word, Excel o imagen — máx. 20 MB c/u).
+      </Text>
+
+      {documentosAdicionales.map((doc, idx) => (
+        <View key={`${doc.uri}-${idx}`} style={{
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+          borderWidth: 1, borderColor: C.border, backgroundColor: C.inputBg,
+          borderRadius: 12, padding: 12,
+        }}>
+          <Feather name="file-text" size={18} color={C.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontFamily: 'Inter_600SemiBold', color: C.text }} numberOfLines={1}>
+              {doc.nombre}
+            </Text>
+            <TextInput
+              style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: C.textSecondary, padding: 0, marginTop: 2 }}
+              placeholder="Descripción (opcional)"
+              placeholderTextColor={C.textSecondary}
+              value={doc.descripcion}
+              onChangeText={(v) => {
+                const actualizados = documentosAdicionales.map((d, i) => i === idx ? { ...d, descripcion: v } : d);
+                set("documentosAdicionales", actualizados);
+              }}
+            />
+          </View>
+          <Pressable
+            onPress={() => set("documentosAdicionales", documentosAdicionales.filter((_, i) => i !== idx))}
+            hitSlop={8}
+          >
+            <Feather name="x" size={16} color={C.textSecondary} />
+          </Pressable>
+        </View>
+      ))}
+
+      <Pressable
+        onPress={async () => {
+          const result = await DocumentPicker.getDocumentAsync({
+            type: [
+              'application/pdf',
+              'application/msword',
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/vnd.ms-excel',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'image/*',
+            ],
+            multiple: true,
+            copyToCacheDirectory: true,
+          });
+          if (result.canceled || !result.assets?.length) return;
+
+          const MAX_BYTES = 20 * 1024 * 1024;
+          const validos: typeof documentosAdicionales = [];
+          const rechazados: string[] = [];
+          for (const asset of result.assets) {
+            if ((asset.size ?? 0) > MAX_BYTES) {
+              rechazados.push(`${asset.name} (pesa más de 20 MB)`);
+              continue;
+            }
+            validos.push({ uri: asset.uri, nombre: asset.name, descripcion: "" });
+          }
+          if (rechazados.length) {
+            Alert.alert("Algunos archivos no se agregaron", rechazados.join('\n'));
+          }
+          if (validos.length) {
+            set("documentosAdicionales", [...documentosAdicionales, ...validos]);
+          }
+        }}
+        style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+          borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.border,
+          backgroundColor: C.inputBg, borderRadius: 12, padding: 14,
+        }}
+      >
+        <Feather name="upload" size={16} color={C.primary} />
+        <Text style={{ fontSize: 13, fontFamily: 'Inter_600SemiBold', color: C.primary }}>
+          Agregar documento
         </Text>
-        {form.planTopograficoArchivo && (
-          <Text style={{ fontSize: 11, fontFamily: 'Inter_400Regular', color: C.textSecondary, marginTop: 2 }}>
-            Toca para cambiar
-          </Text>
-        )}
-      </View>
-      {form.planTopograficoArchivo && (
-        <Pressable onPress={() => set("planTopograficoArchivo", null)} hitSlop={8}>
-          <Feather name="x" size={16} color={C.textSecondary} />
-        </Pressable>
-      )}
-    </Pressable>
+      </Pressable>
+    </>
   )}
 
   <View style={styles.divider} />

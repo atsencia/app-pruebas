@@ -30,9 +30,9 @@ const initialFormData = {
     // ── NUEVO ──
   tipoRegistro:    'normal',   // 'normal' | 'acta_madre' | 'zona_proyecto'
   codigoProyecto:  '',         // ej. 'movistar_arena_2025'
-planTopografico: false, planTopograficoArchivo: null,
+planTopografico: false,
 observacionesProfesional: "",  // ← agrégala de vuelta
-  fotos: [], fotosFachada: [], videos: [],
+  fotos: [], fotosFachada: [], videos: [], documentosAdicionales: [],
 };
 
 export const useFormStore = create(
