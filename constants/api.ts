@@ -8,4 +8,4 @@
 // a un backend local durante desarrollo. Sin esa variable, cae al
 // backend real por defecto.
 export const API_BASE =
-  process.env.EXPO_PUBLIC_API_BASE || "https://187.33.154.112.sslip.io/backend";
+  process.env.EXPO_PUBLIC_API_BASE || "https://vecindad.sencia.com.co:9000";

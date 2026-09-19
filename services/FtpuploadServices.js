@@ -1,19 +1,37 @@
 // services/FTPUploadService.js
 import * as FileSystem from 'expo-file-system/legacy';
-import FTPClient from './FTPClient';
+import SSHClient from '@dylankenneally/react-native-ssh-sftp';
 import { Buffer } from 'buffer';
 import { API_BASE } from '../constants/api';
 
 // Overridable por .env.local (EXPO_PUBLIC_* — Expo las inyecta en el bundle)
-// para poder probar contra un FTP/backend local sin tocar estos defaults,
-// que son los de producción.
-const FTP_CONFIG = {
-  host:     process.env.EXPO_PUBLIC_FTP_HOST     || '187.33.154.112',
-  port:     Number(process.env.EXPO_PUBLIC_FTP_PORT) || 21,
-  user:     process.env.EXPO_PUBLIC_FTP_USER     || 'ftpuser',
-  password: process.env.EXPO_PUBLIC_FTP_PASSWORD || 'Sencia2026AT',
-  baseDir:  process.env.EXPO_PUBLIC_FTP_BASEDIR  || '/home/ftpuser/uploads',
+// para poder probar contra un SFTP/backend local sin tocar estos defaults.
+//
+// A diferencia del FTP_CONFIG viejo, NO hay un fallback hardcodeado para la
+// llave privada: era justamente el problema de seguridad (credenciales de
+// prod en texto plano en el código fuente, ver incidente de seguridad
+// documentado en las notas del proyecto). Si falta la variable de entorno,
+// la subida falla con un error explícito en vez de conectarse con una
+// credencial embebida en git.
+const SFTP_CONFIG = {
+  host:           process.env.EXPO_PUBLIC_SFTP_HOST    || 'vecindad.sencia.com.co',
+  port:           Number(process.env.EXPO_PUBLIC_SFTP_PORT) || 9022,
+  user:           process.env.EXPO_PUBLIC_SFTP_USER    || 'ftpuser',
+  baseDir:        process.env.EXPO_PUBLIC_SFTP_BASEDIR || '/uploads',
+  privateKeyB64:  process.env.EXPO_PUBLIC_SFTP_PRIVATE_KEY_B64 || null,
+  passphrase:     process.env.EXPO_PUBLIC_SFTP_PASSPHRASE || undefined,
 };
+
+function obtenerLlavePrivada() {
+  if (!SFTP_CONFIG.privateKeyB64) {
+    throw new Error(
+      'Falta EXPO_PUBLIC_SFTP_PRIVATE_KEY_B64 — configurá la llave privada SFTP en ' +
+      '.env.local (desarrollo) o como EAS secret (build de producción). No se ' +
+      'hardcodea acá por seguridad.'
+    );
+  }
+  return Buffer.from(SFTP_CONFIG.privateKeyB64, 'base64').toString('utf8');
+}
 
 export async function validarSubidaBackend(carpeta, token) {
   try {
@@ -342,74 +360,114 @@ export async function subirFormularioFTP(formulario, onProgreso = () => {}, toke
   throw ultimoError;
 }
 
+// Quita el prefijo file:// — el módulo nativo de SFTP recibe la ruta con
+// java.io.File / NSURL de archivo local, no con un URI con esquema.
+function rutaLocalSinEsquema(uri) {
+  return uri.startsWith('file://') ? uri.slice('file://'.length) : uri;
+}
+
+async function crearDirectorioSFTP(client, ruta) {
+  try {
+    await client.sftpMkdir(ruta);
+  } catch (_) {
+    // El cliente nativo no distingue "ya existe" de otros errores (ver
+    // RNSshClientModule.sftpMkdir) — si de verdad falló por otra razón,
+    // las subidas de abajo lo van a hacer evidente con un error propio.
+  }
+}
+
+// El módulo nativo sube el archivo DENTRO del directorio remoto indicado,
+// usando como nombre el basename del archivo LOCAL (no permite renombrar
+// en la subida — ver RNSshClientModule.sftpUpload: hace
+// `path + '/' + new File(filePath).getName()`). Para que el archivo quede
+// en el servidor con el nombre canónico (foto_001.jpg, datos.json, etc.)
+// primero lo copiamos a un staging local con ese nombre exacto.
+const STAGING_DIR = `${FileSystem.cacheDirectory}sftp_staging/`;
+
+async function subirConNombre(client, uriLocal, nombreRemoto, carpetaRemota, onProgreso) {
+  await FileSystem.makeDirectoryAsync(STAGING_DIR, { intermediates: true }).catch(() => {});
+  const stagingUri = `${STAGING_DIR}${nombreRemoto}`;
+
+  await FileSystem.copyAsync({ from: uriLocal, to: stagingUri });
+  try {
+    if (onProgreso) client.on('UploadProgress', (evt) => onProgreso(evt?.bytesTransfered ?? 0, evt?.totalBytes ?? 0));
+    await client.sftpUpload(rutaLocalSinEsquema(stagingUri), carpetaRemota);
+  } finally {
+    if (onProgreso) client.off('UploadProgress');
+    await FileSystem.deleteAsync(stagingUri, { idempotent: true }).catch(() => {});
+  }
+}
+
+async function subirTextoConNombre(client, contenido, nombreRemoto, carpetaRemota) {
+  await FileSystem.makeDirectoryAsync(STAGING_DIR, { intermediates: true }).catch(() => {});
+  const stagingUri = `${STAGING_DIR}${nombreRemoto}`;
+  await FileSystem.writeAsStringAsync(stagingUri, contenido, { encoding: FileSystem.EncodingType.UTF8 });
+  try {
+    await client.sftpUpload(rutaLocalSinEsquema(stagingUri), carpetaRemota);
+  } finally {
+    await FileSystem.deleteAsync(stagingUri, { idempotent: true }).catch(() => {});
+  }
+}
+
 // ==================== LÓGICA INTERNA (un solo intento) ====================
 async function _subirFormularioFTPInterno(id, formulario, onProgreso) {
-  const carpeta = `${FTP_CONFIG.baseDir}/${id}`;
-  const ftp     = new FTPClient(FTP_CONFIG);
-
+  const carpeta = `${SFTP_CONFIG.baseDir}/${id}`;
+  let client = null;
   let listaMultimedia = [];
 
   try {
-    onProgreso(5, 'Conectando al servidor FTP...');
-    await ftp.connect();
-    await ftp.crearDirectorio(FTP_CONFIG.baseDir);
-    await ftp.crearDirectorio(carpeta);
+    onProgreso(5, 'Conectando al servidor SFTP...');
+    client = await SSHClient.connectWithKey(
+      SFTP_CONFIG.host,
+      SFTP_CONFIG.port,
+      SFTP_CONFIG.user,
+      obtenerLlavePrivada(),
+      SFTP_CONFIG.passphrase
+    );
+    await client.connectSFTP();
+
+    await crearDirectorioSFTP(client, SFTP_CONFIG.baseDir);
+    await crearDirectorioSFTP(client, carpeta);
 
     onProgreso(10, 'Preparando archivos multimedia y firmas...');
     listaMultimedia = await construirListaMultimedia(formulario);
 
     const datosJSON = construirDatosJSON(id, formulario, listaMultimedia);
 
-    // ── datos.json con verificación ──────────────────────────
+    // ── datos.json ────────────────────────────────────────────
     onProgreso(15, 'Subiendo datos.json...');
-    const jsonStr   = JSON.stringify(datosJSON, null, 2);
-    const jsonBytes = Buffer.from(jsonStr, 'utf8').length;
+    const jsonStr = JSON.stringify(datosJSON, null, 2);
+    await subirTextoConNombre(client, jsonStr, 'datos.json', carpeta);
 
-    await ftp.subirArchivo(jsonStr, `${carpeta}/datos.json`, false);
-
-    const tamanoJsonRemoto = await ftp.obtenerTamanoRemoto(`${carpeta}/datos.json`);
-    if (tamanoJsonRemoto !== null && tamanoJsonRemoto !== jsonBytes) {
-      throw new Error(
-        `datos.json incompleto: esperado ${jsonBytes} bytes, llegaron ${tamanoJsonRemoto}`
-      );
-    }
-
-    // ── Multimedia con verificación ───────────────────────────
+    // ── Multimedia ──────────────────────────────────────────
     const total = listaMultimedia.length;
     for (let i = 0; i < total; i++) {
-      const item       = listaMultimedia[i];
-      const rutaRemota = `${carpeta}/${item.nombreRemoto}`;
-      const basePct    = 25 + Math.round((i / total) * 65);
+      const item    = listaMultimedia[i];
+      const basePct = 25 + Math.round((i / total) * 65);
 
       onProgreso(basePct, `Subiendo ${item.categoria} (${i + 1}/${total}): ${item.nombreRemoto}`);
 
-      const fileInfo    = await FileSystem.getInfoAsync(item.uriLocal, { size: true });
-      const tamanoLocal = fileInfo.size ?? null;
-
-      await subirYVerificar(
-        ftp,
-        item.uriLocal,
-        rutaRemota,
-        tamanoLocal,
-        (sent, totalBytes) => {
-          const pct = basePct + Math.round((sent / totalBytes) * (65 / total));
-          onProgreso(pct, `${item.nombreRemoto}: ${Math.round((sent / totalBytes) * 100)}%`);
-        }
-      );
+      await subirConNombre(client, item.uriLocal, item.nombreRemoto, carpeta, (sent, totalBytes) => {
+        if (!totalBytes) return;
+        const pct = basePct + Math.round((sent / totalBytes) * (65 / total));
+        onProgreso(pct, `${item.nombreRemoto}: ${Math.round((sent / totalBytes) * 100)}%`);
+      });
 
       if (item.esTemporal) {
         await FileSystem.deleteAsync(item.uriLocal, { idempotent: true }).catch(() => {});
       }
     }
 
-    // ── .done solo si todo pasó verificación ─────────────────
-    await ftp.subirArchivo(
+    // ── .done al final, solo si todo lo anterior no lanzó ────
+    await subirTextoConNombre(
+      client,
       JSON.stringify({ completado: true, timestamp: new Date().toISOString() }),
-      `${carpeta}/.done`,
-      false
+      '.done',
+      carpeta
     );
 
-    await ftp.disconnect();
+    client.disconnectSFTP();
+    client.disconnect();
 
     onProgreso(100, '¡Registro enviado correctamente!');
     return {
@@ -421,7 +479,7 @@ async function _subirFormularioFTPInterno(id, formulario, onProgreso) {
     };
 
   } catch (error) {
-    try { await ftp.disconnect(); } catch (_) {}
+    try { client?.disconnectSFTP(); client?.disconnect(); } catch (_) {}
 
     for (const item of listaMultimedia) {
       if (item.esTemporal) {
@@ -431,20 +489,4 @@ async function _subirFormularioFTPInterno(id, formulario, onProgreso) {
 
     throw error;
   }
-}
-// Función helper de verificación
-async function subirYVerificar(ftp, uriLocal, rutaRemota, totalBytes, onProgreso) {
-  await ftp.subirArchivoDesdeURI(uriLocal, rutaRemota, onProgreso);
-
-  const tamanoRemoto = await ftp.obtenerTamanoRemoto(rutaRemota);
-  if (tamanoRemoto === null) {
-    console.warn(`[Verificar] SIZE no soportado para ${rutaRemota}`);
-    return;
-  }
-  if (tamanoRemoto !== totalBytes) {
-    throw new Error(
-      `Archivo incompleto: ${rutaRemota} — esperado ${totalBytes} bytes, llegaron ${tamanoRemoto}`
-    );
-  }
-  console.log(`[Verificar] ✅ ${rutaRemota} (${tamanoRemoto} bytes)`);
 }

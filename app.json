@@ -35,6 +35,8 @@
     },
     "plugins": [
       "./plugins/withOsmMap",
+      "./plugins/withVecindadCert",
+      "./plugins/withBouncyCastleFix",
       [
         "expo-image-picker",
         {
