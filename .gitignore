@@ -30,6 +30,11 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+# Excepción: CA pública (no una llave privada) que el prebuild de Android
+# necesita empaquetar. `eas build` sube el proyecto filtrando con estas
+# reglas de .gitignore, así que si se ignora acá, EAS Build tampoco la ve
+# aunque esté commiteada en git (ENOENT en withVecindadCert.js).
+!/certs/vecindad_ca.pem
 
 # local env files
 .env*.local
