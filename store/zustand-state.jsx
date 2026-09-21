@@ -30,6 +30,7 @@ const initialFormData = {
     // ── NUEVO ──
   tipoRegistro:    'normal',   // 'normal' | 'acta_madre' | 'zona_proyecto'
   codigoProyecto:  '',         // ej. 'movistar_arena_2025'
+  encabezadoVersion: null,     // versión del encabezado con la que se llenó una zona (V1, V2…)
 planTopografico: false,
 observacionesProfesional: "",  // ← agrégala de vuelta
   fotos: [], fotosFachada: [], videos: [], documentosAdicionales: [],
@@ -136,24 +137,70 @@ export const CAMPOS_CABECERA_LOTE = CAMPOS_TEMPLATE.filter(
   k => k !== 'tieneZona' && k !== 'zonaDesc'
 );
 
+// Versiones del encabezado (= cabecera): V1 es la del Acta Inicial y cada
+// edición desde el popup de la zona crea una versión nueva, sin tocar las
+// anteriores. Cada acta guarda con cuál se llenó (formulario.encabezadoVersion).
+// Un lote guardado antes de que existieran las versiones no tiene `versiones`:
+// se trata como si su cabecera fuera la V1.
+export const versionesDeLote = (lote) => {
+  if (!lote) return [];
+  if (lote.versiones?.length) return lote.versiones;
+  return [{ numero: 1, cabecera: lote.cabecera, creadoEn: lote.iniciadoEn }];
+};
+
 export const useLoteMovistarArena = create(
   persist(
     (set, get) => ({
-      // { codigoProyecto, cabecera, iniciadoEn, totalZonas } | null
+      // { codigoProyecto, cabecera, iniciadoEn, totalZonas, versiones, versionActiva } | null
+      // `cabecera` siempre es la de la versión activa.
       loteActivo: null,
 
-      // Se llama al enviar la ACTA MADRE: fija la cabecera del lote.
+      // Se llama al enviar la ACTA MADRE: fija la cabecera del lote (V1).
       iniciarLote: (formData) => {
         const cabecera = {};
         CAMPOS_CABECERA_LOTE.forEach(k => { cabecera[k] = formData[k]; });
+        const ahora = new Date().toISOString();
         set({
           loteActivo: {
             codigoProyecto: formData.codigoProyecto || CODIGO_PROYECTO_MOVISTAR,
             cabecera,
-            iniciadoEn: new Date().toISOString(),
+            iniciadoEn: ahora,
             totalZonas: 0,
+            versiones: [{ numero: 1, cabecera, creadoEn: ahora }],
+            versionActiva: 1,
           },
         });
+      },
+
+      // Crea una versión nueva a partir de una cabecera editada y la deja como
+      // activa. Devuelve el número creado (null si no hay lote).
+      agregarVersion: (cabeceraEditada) => {
+        const lote = get().loteActivo;
+        if (!lote) return null;
+        const versiones = versionesDeLote(lote);
+        const numero = Math.max(...versiones.map(v => v.numero)) + 1;
+        const cabecera = {};
+        CAMPOS_CABECERA_LOTE.forEach(k => { cabecera[k] = cabeceraEditada[k]; });
+        set({
+          loteActivo: {
+            ...lote,
+            cabecera,
+            versiones: [...versiones, { numero, cabecera, creadoEn: new Date().toISOString() }],
+            versionActiva: numero,
+          },
+        });
+        return numero;
+      },
+
+      // Cambia la versión activa (p. ej. volver a la V1). Devuelve su cabecera.
+      usarVersion: (numero) => {
+        const lote = get().loteActivo;
+        if (!lote) return null;
+        const versiones = versionesDeLote(lote);
+        const v = versiones.find(x => x.numero === numero);
+        if (!v) return null;
+        set({ loteActivo: { ...lote, cabecera: v.cabecera, versiones, versionActiva: numero } });
+        return v.cabecera;
       },
 
       // Se llama al enviar cada ZONA del lote.

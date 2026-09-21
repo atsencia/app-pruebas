@@ -29,7 +29,8 @@ import { useFormStore, useBorradores  } from '../store/zustand-state';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
 import QueueStatusBar from '@/components/QueueStatusBar';
 import LoteMovistarArena from '@/components/LoteMovistarArena';
-import { useLoteMovistarArena, CODIGO_PROYECTO_MOVISTAR } from '@/store/zustand-state';
+import { useLoteMovistarArena, CODIGO_PROYECTO_MOVISTAR, versionesDeLote } from '@/store/zustand-state';
+import EncabezadoInicialModal, { fechaCorta } from '@/components/EncabezadoInicialModal';
 import * as DocumentPicker from 'expo-document-picker';
 import { useBorradoresActions } from '../hooks/useBorradoresActions';
 import { usePredioTemplates } from '@/store/zustand-state';
@@ -125,6 +126,7 @@ export interface FormData {
   documentosAdicionales: { uri: string; nombre: string; descripcion: string }[];
   tipoRegistro:   'normal' | 'acta_madre' | 'zona_proyecto';
   codigoProyecto: string;
+  encabezadoVersion: number | null;
 }
 
 interface FieldErrors {
@@ -171,7 +173,12 @@ const SIDEBAR_ITEMS: { icon: any; label: string; route: string; description: str
 ];
 
 const SERVICIO_OPTIONS = ["Si", "No", "No Aplica"];
-const USO_OPTIONS      = ["Si", "No", "N/A"];
+
+// Uso actual del predio: texto libre (antes era un select Si/No/N/A).
+// Vacío o solo espacios → "N/A"; si escribió algo se envía tal cual, con
+// un tope de USO_MAX_CHARS (el mismo que aplica el acta al mostrarlo).
+const USO_MAX_CHARS = 70;
+const textoUso = (v?: string) => (v ?? "").trim().slice(0, USO_MAX_CHARS).trim() || "N/A";
 
 // ─────────────────────────────────────────────
 // SUB-COMPONENTE: SELECT FIELD
@@ -319,8 +326,9 @@ export default function FormScreen() {
 
       const { guardar } = useBorradoresActions();
       const { crearDesdeForm } = usePredioTemplates();
-      const { loteActivo, iniciarLote, registrarZonaSubida, cerrarLote } = useLoteMovistarArena();
+      const { loteActivo, iniciarLote, registrarZonaSubida, cerrarLote, agregarVersion, usarVersion } = useLoteMovistarArena();
 
+      const [modalEncabezadoVisible, setModalEncabezadoVisible] = useState(false);
       const [modalBorradorVisible, setModalBorradorVisible]   = useState(false);
       const [modalTemplateVisible, setModalTemplateVisible]   = useState(false);
       const [borradorActivoId,     setBorradorActivoId]       = useState<string | null>(null);
@@ -339,6 +347,10 @@ export default function FormScreen() {
         const data = await response.json();
         const f = data.acta;
         setField("tipoActa",    f.tipoActa    ?? "");
+        // Sin selector de tipo de registro, al editar se respeta el del registro.
+        setField("tipoRegistro",      f.tipoRegistro      ?? "normal");
+        setField("codigoProyecto",    f.codigoProyecto    ?? "");
+        setField("encabezadoVersion", f.encabezadoVersion ?? null);
         setField("nombre",      f.nombre      ?? "");
         setField("cedula",      f.cedula      ?? "");
         setField("direccion",   f.direccion   ?? "");
@@ -414,15 +426,44 @@ export default function FormScreen() {
     setTimeout(() => router.push(route as any), 240);
   };
 
+  // ── Tipo de registro según la entrada del sidebar ─────────────────────
+  // Ya no hay selector: "Nueva Acta" abre una acta regular, y Movistar Arena →
+  // "Nueva Acta Inicial" / "Nueva Zona" abren esos tipos. Como cambiar de tipo
+  // vacía el formulario, si ya hay algo escrito se pide confirmación.
+  const formTieneDatos = () =>
+    form.fotos.length + form.fotosFachada.length + form.videos.length + documentosAdicionales.length > 0 ||
+    [form.zonaDesc, form.estadoFachada, form.acabadosPisos, form.observacionesProfesional,
+     form.fisurasCerradasDesc, form.fisurasAbiertasDesc, form.grietasDesc].some(t => (t ?? '').trim() !== '') ||
+    // en una zona nombre/cédula/dirección vienen precargados del encabezado: no cuentan
+    (!esZona && [form.nombre, form.cedula, form.direccion].some(t => (t ?? '').trim() !== ''));
+
+  const conConfirmacion = (empezar: () => void) => {
+    if (!formTieneDatos()) { empezar(); return; }
+    Alert.alert(
+      'Descartar el formulario actual',
+      'Se perderá lo que ya escribiste. Si lo necesitas, guárdalo antes como borrador.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Descartar y continuar', style: 'destructive', onPress: empezar },
+      ]
+    );
+  };
+
+  const nuevaActaRegular = () => conConfirmacion(() => {
+    clearForm();   // el estado inicial ya es tipoRegistro 'normal', sin código de proyecto
+    closeSidebar();
+    setTimeout(() => router.replace('/form'), 240);
+  });
+
   // ── Lote Movistar Arena ─────────────────────
   const nuevaActaInicialMovistar = () => {
-    const empezar = () => {
+    const empezar = () => conConfirmacion(() => {
       clearForm();
       setField('tipoRegistro', 'acta_madre');
       setField('codigoProyecto', CODIGO_PROYECTO_MOVISTAR);
       closeSidebar();
       setTimeout(() => router.replace('/form'), 240);
-    };
+    });
     if (loteActivo && loteActivo.totalZonas > 0) {
       Alert.alert(
         'Ya hay un lote activo',
@@ -437,14 +478,38 @@ export default function FormScreen() {
     }
   };
 
+  // Copia una versión del encabezado al formulario y marca cuál se usó. Las
+  // coordenadas solo se copian al abrir la zona (`conCoords`): después cada
+  // zona captura las suyas y una versión nueva no debe pisarlas.
+  const aplicarCabecera = (cabecera: Record<string, any>, version: number, conCoords = false) => {
+    Object.entries(cabecera).forEach(([k, v]) => {
+      if (!conCoords && (k === 'latitud' || k === 'longitud')) return;
+      setField(k, v);
+    });
+    setField('encabezadoVersion', version);
+  };
+
   const nuevaZonaDelLote = () => {
     if (!loteActivo) return;
-    clearForm();
-    setField('tipoRegistro', 'zona_proyecto');
-    setField('codigoProyecto', loteActivo.codigoProyecto);
-    Object.entries(loteActivo.cabecera).forEach(([k, v]) => setField(k, v));
-    closeSidebar();
-    setTimeout(() => router.replace('/form'), 240);
+    conConfirmacion(() => {
+      clearForm();
+      setField('tipoRegistro', 'zona_proyecto');
+      setField('codigoProyecto', loteActivo.codigoProyecto);
+      aplicarCabecera(loteActivo.cabecera, loteActivo.versionActiva ?? 1, true);
+      closeSidebar();
+      setTimeout(() => router.replace('/form'), 240);
+    });
+  };
+
+  // Popup "Verificar información inicial del acta"
+  const usarVersionEncabezado = (numero: number) => {
+    const cabecera = usarVersion(numero);
+    if (cabecera) aplicarCabecera(cabecera, numero);
+  };
+
+  const guardarVersionEncabezado = (cabecera: Record<string, any>) => {
+    const numero = agregarVersion(cabecera);
+    if (numero) aplicarCabecera(cabecera, numero);
   };
 
   const cerrarLoteMovistar = () => {
@@ -470,6 +535,14 @@ export default function FormScreen() {
   const esZona    = form.tipoRegistro === 'zona_proyecto';
   const esMadre   = form.tipoRegistro === 'acta_madre';
   const esNormal  = form.tipoRegistro === 'normal';
+  // En una zona con lote activo, propietario / interventoría / predio /
+  // servicios / uso / acceso vienen del encabezado y se ocultan (se revisan y
+  // editan desde el popup). Sin lote no hay de dónde precargarlos: se muestran.
+  // Editando un registro ya enviado se muestra todo, tal como se guardó.
+  const encabezadoColapsado = esZona && !isEditing && !!loteActivo && loteActivo.codigoProyecto === form.codigoProyecto;
+  const versionEnUso = form.encabezadoVersion ?? loteActivo?.versionActiva ?? 1;
+  const versionesLote = versionesDeLote(loteActivo);
+  const fechaVersionEnUso = versionesLote.find((v: any) => v.numero === versionEnUso)?.creadoEn;
   const set = (key: keyof FormData, value: any) => setField(key, value);
 
   const setFirma = (
@@ -538,15 +611,15 @@ export default function FormScreen() {
     servicioTelefono:       form.servicioTelefono       || "No Aplica",
     servicioGas:            form.servicioGas            || "No Aplica",
     servicioOtros:          form.servicioOtros,
-    usoResidencial:   form.usoResidencial   || "N/A",
-    usoComercial:     form.usoComercial     || "N/A",
-    usoIndustrial:    form.usoIndustrial    || "N/A",
-    usoInstitucional: form.usoInstitucional || "N/A",
-    usoRecreacional:  form.usoRecreacional  || "N/A",
-    usoBaldio:        form.usoBaldio        || "N/A",
-    usoBIC:           form.usoBIC           || "N/A",
-    usoMixto:         form.usoMixto         || "N/A",
-    usoOtro:          form.usoOtro          || "N/A",
+    usoResidencial:   textoUso(form.usoResidencial),
+    usoComercial:     textoUso(form.usoComercial),
+    usoIndustrial:    textoUso(form.usoIndustrial),
+    usoInstitucional: textoUso(form.usoInstitucional),
+    usoRecreacional:  textoUso(form.usoRecreacional),
+    usoBaldio:        textoUso(form.usoBaldio),
+    usoBIC:           textoUso(form.usoBIC),
+    usoMixto:         textoUso(form.usoMixto),
+    usoOtro:          textoUso(form.usoOtro),
     tieneGaraje:          form.tieneGaraje,
     cantidadGarajes:      form.cantidadGarajes,
     usoGaraje:            form.usoGaraje,
@@ -587,6 +660,8 @@ export default function FormScreen() {
     videosCount:       form.videos.length,
       tipoRegistro:   form.tipoRegistro,
       codigoProyecto: form.codigoProyecto || null,
+      // Versión del encabezado con la que se llenó la zona (V1, V2…); solo aplica a zonas.
+      encabezadoVersion: esZona ? (form.encabezadoVersion ?? null) : null,
   });
 
   // ── Submit ──────────────────────────────────
@@ -682,7 +757,10 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         </Pressable>
         <View style={styles.topBarCenter}>
           <Text style={styles.topBarTitle}>
-            {isEditing ? "Editar Registro" : "Nuevo Registro"}
+            {isEditing ? "Editar Registro"
+              : esMadre ? "Acta Inicial · Movistar Arena"
+              : esZona  ? "Nueva Zona · Movistar Arena"
+              : "Nueva Acta"}
           </Text>
           <Text style={styles.topBarSub}>Operador: {user?.username}</Text>
         </View>
@@ -702,42 +780,9 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* 0-A. TIPO DE REGISTRO */}
-<View style={styles.tipoActaCard}>
-  <Text style={styles.tipoActaLabel}>TIPO DE REGISTRO</Text>
-  <View style={styles.tipoActaRow}>
-    {[
-      { value: 'normal',         label: 'Acta Regular'       },
-      { value: 'acta_madre',     label: 'Acta Inicial' },
-      { value: 'zona_proyecto',  label: 'Por Zona'     },
-    ].map((opt) => {
-      const active = form.tipoRegistro === opt.value;
-      return (
-          <Pressable
-      key={opt.value}
-      style={[styles.tipoActaBtn, active && styles.tipoActaBtnActive]}
-      onPress={() => {
-        set('tipoRegistro', opt.value);
-        // ← auto-asigna el código si es madre o zona, sin que el usuario escriba nada
-        if (opt.value === 'acta_madre' || opt.value === 'zona_proyecto') {
-          set('codigoProyecto', CODIGO_PROYECTO_MOVISTAR);
-        } else {
-          set('codigoProyecto', '');
-        }
-      }}
-    >
-          <Text style={[styles.tipoActaBtnText, active && styles.tipoActaBtnTextActive]}>
-            {opt.label}
-          </Text>
-        </Pressable>
-      );
-    })}
-  </View>
-
-  {/* Campo código de proyecto — solo visible si es acta_madre o zona_proyecto */}
- 
-</View>
-
+        {/* El tipo de registro (regular / acta inicial / por zona) ya no se elige
+            aquí: lo define la entrada del sidebar con la que se abrió el formulario
+            (Nueva Acta, Movistar Arena → Nueva Acta Inicial / Nueva Zona). */}
     <View style={styles.tipoActaCard}>
       <Text style={styles.tipoActaLabel}>TIPO DE ACTA</Text>
       <View style={styles.tipoActaRow}>
@@ -768,6 +813,33 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         onAplicar={handleAplicarTemplate}
         onGuardarActual={() => setModalTemplateVisible(true)}
       /> */}
+        {encabezadoColapsado ? (
+          <View style={styles.encabezadoCard}>
+            <View style={styles.encabezadoHeader}>
+              <View style={styles.encabezadoIconBg}>
+                <Feather name="file-text" size={18} color={C.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.encabezadoTitulo}>Información inicial del acta</Text>
+                <Text style={styles.encabezadoSub}>
+                  Se llenará con el encabezado <Text style={styles.encabezadoVersionTxt}>V{versionEnUso}</Text>
+                  {fechaCorta(fechaVersionEnUso) ? ` · ${fechaCorta(fechaVersionEnUso)}` : ''}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.encabezadoResumen} numberOfLines={2}>
+              {(form.direccion ?? '').trim() || 'Sin dirección'} · {(form.nombre ?? '').trim() || 'Sin propietario'}
+            </Text>
+            <Pressable
+              style={({ pressed }) => [styles.encabezadoBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => setModalEncabezadoVisible(true)}
+            >
+              <Feather name="eye" size={15} color="#fff" />
+              <Text style={styles.encabezadoBtnTxt}>Verificar información inicial del acta</Text>
+            </Pressable>
+          </View>
+        ) : (
+        <>
          <CollapsibleSection
           icon="user"
           title="Datos del Propietario"
@@ -936,6 +1008,8 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           <View style={styles.divider} />
           <ToggleField label="¿Está ocupada actualmente?" value={form.estaOcupada} onChange={(v) => set("estaOcupada", v)} />
         </Section>
+        </>
+        )}
         {/* 4-B. UBICACIÓN Y ZONA — solo visible si ES zona */}
         {esZona && (
           <Section icon="map-pin" title="Ubicación de la Zona">
@@ -1012,6 +1086,9 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           <PhotoPickerSection photos={form.fotosFachada} onPhotosChange={(fotos) => set("fotosFachada", fotos)} />
         </CollapsibleSection>
 
+        {/* 5-7. SERVICIOS, USO ACTUAL Y ACCESO VEHICULAR — en una zona con lote vienen del encabezado */}
+        {!encabezadoColapsado && (
+        <>
         {/* 5. SERVICIOS PÚBLICOS */}
          <Section icon="zap" title="Servicios Públicos">
           <InfoBox text="Seleccione el estado de cada servicio. En 'Otros' describa servicios adicionales." />
@@ -1034,13 +1111,14 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
 
         {/* 6. USO ACTUAL */}
           <Section icon="layers" title="Uso Actual del Predio">
-          <InfoBox text="Seleccione el uso. Sin selección se enviará como 'N/A'." />
+          <InfoBox text={`Escriba el uso (máx. ${USO_MAX_CHARS} caracteres). Si lo deja vacío se enviará como 'N/A'.`} />
           {USOS_ACTUALES.map(({ key, label }) => (
             <View key={key} style={styles.usoRow}>
               <Text style={styles.usoLabel}>{label}</Text>
               <View style={styles.usoInputContainer}>
-                <SelectField label="" value={(form as any)[key]} options={USO_OPTIONS}
-                  onChange={(v) => set(key as keyof FormData, v)} defaultEmpty="N/A" />
+                <TextInput style={styles.input} placeholder="N/A" placeholderTextColor={C.textSecondary}
+                  value={(form as any)[key]} onChangeText={(v) => set(key as keyof FormData, v)}
+                  maxLength={USO_MAX_CHARS} />
               </View>
             </View>
           ))}
@@ -1086,6 +1164,8 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               value={form.anchoAccesoVehicular} onChangeText={(v) => set("anchoAccesoVehicular", v)} keyboardType="decimal-pad" />
           </Field>
         </Section>
+        </>
+        )}
 
         {/* 8. EVALUACIÓN ESTRUCTURAL */}
   {!esMadre &&(
@@ -1462,16 +1542,23 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
 
         <View style={styles.sidebarDivider} />
 
-        {/* Nuevo registro (activo) */}
-        <View style={[styles.sidebarItem, styles.sidebarItemActive]}>
-          <View style={[styles.sidebarItemIcon, styles.sidebarItemIconActive]}>
-            <Feather name="plus-circle" size={16} color="#fff" />
+        {/* Nueva acta regular (se resalta cuando es la que se está llenando) */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.sidebarItem,
+            esNormal && !isEditing && styles.sidebarItemActive,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={nuevaActaRegular}
+        >
+          <View style={[styles.sidebarItemIcon, esNormal && !isEditing && styles.sidebarItemIconActive]}>
+            <Feather name="plus-circle" size={16} color={esNormal && !isEditing ? "#fff" : C.primary} />
           </View>
           <View style={styles.sidebarItemText}>
-            <Text style={[styles.sidebarItemLabel, styles.sidebarItemLabelActive]}>Nuevo Registro</Text>
-            <Text style={styles.sidebarItemDesc}>Formulario actual</Text>
+            <Text style={[styles.sidebarItemLabel, esNormal && !isEditing && styles.sidebarItemLabelActive]}>Nueva Acta</Text>
+            <Text style={styles.sidebarItemDesc}>Acta regular</Text>
           </View>
-        </View>
+        </Pressable>
 {/* Borradores con badge */}
 <Pressable
   style={({ pressed }) => [styles.sidebarItem, pressed && { opacity: 0.7 }]}
@@ -1548,6 +1635,15 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         </View>
       )}
 
+
+      <EncabezadoInicialModal
+        visible={modalEncabezadoVisible}
+        versiones={versionesLote}
+        versionActiva={versionEnUso}
+        onClose={() => setModalEncabezadoVisible(false)}
+        onUsarVersion={usarVersionEncabezado}
+        onGuardarNuevaVersion={guardarVersionEncabezado}
+      />
 
       <GuardarBorradorModal
   visible={modalBorradorVisible}
@@ -1642,6 +1738,19 @@ const styles = StyleSheet.create({
   tipoActaBtnActive:     { backgroundColor: C.primary, borderColor: C.primary },
   tipoActaBtnText:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
   tipoActaBtnTextActive: { color: "#fff" },
+
+  encabezadoCard: { backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 12,
+    borderWidth: 1.5, borderColor: C.primary + "30",
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3 },
+  encabezadoHeader:     { flexDirection: "row", alignItems: "center", gap: 12 },
+  encabezadoIconBg:     { width: 38, height: 38, borderRadius: 12, backgroundColor: C.primary + "15", justifyContent: "center", alignItems: "center" },
+  encabezadoTitulo:     { fontSize: 15, fontFamily: "Inter_700Bold", color: C.text },
+  encabezadoSub:        { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 2 },
+  encabezadoVersionTxt: { fontFamily: "Inter_700Bold", color: C.primary },
+  encabezadoResumen:    { fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
+  encabezadoBtn:        { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: C.primary, paddingVertical: 13, borderRadius: 13 },
+  encabezadoBtnTxt:     { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#fff" },
 
   section: { backgroundColor: C.card, borderRadius: 20, overflow: "hidden",
     shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 3 },

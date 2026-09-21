@@ -15,6 +15,7 @@ interface LoteActivo {
   cabecera: Record<string, any>;
   iniciadoEn: string;
   totalZonas: number;
+  versionActiva?: number;   // versión del encabezado con la que se llenarán las próximas zonas
 }
 
 interface Props {
@@ -74,7 +75,7 @@ export default function LoteMovistarArena({
                   {(loteActivo.cabecera.direccion || '').trim() || 'Sin dirección'}
                 </Text>
                 <Text style={styles.resumenMeta}>
-                  {loteActivo.totalZonas} zona{loteActivo.totalZonas === 1 ? '' : 's'} subida{loteActivo.totalZonas === 1 ? '' : 's'}
+                  Encabezado V{loteActivo.versionActiva ?? 1} · {loteActivo.totalZonas} zona{loteActivo.totalZonas === 1 ? '' : 's'} subida{loteActivo.totalZonas === 1 ? '' : 's'}
                 </Text>
               </View>
 
