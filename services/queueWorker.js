@@ -13,6 +13,7 @@ import {
   ESTADO,
 } from './uploadQueue';
 import { subirFormularioFTP, validarSubidaBackend } from './FtpuploadServices';
+import { borrarRespaldo, limpiarRespaldosHuerfanos } from './respaldoLocal';
 
 // ── Imports opcionales (no disponibles en Expo Go / web) ─────
 let BackgroundFetch = null;
@@ -143,11 +144,17 @@ async function guardarEnAlbum(formulario) {
 }
 
 // ── Borrar archivos locales tras éxito ───────────────────────
+// Solo se llama cuando el backend confirmó la carga completa. Borra la carpeta
+// de respaldo del acta (si tenía) y cualquier archivo local que siga suelto
+// (actas encoladas antes del respaldo o cuyo respaldo no se pudo crear).
 async function borrarArchivosLocales(formulario) {
+  await borrarRespaldo(formulario);
+
   const uris = [
     ...(formulario.fotos        || []).map(f => f.uri ?? f),
     ...(formulario.fotosFachada || []).map(f => f.uri ?? f),
     ...(formulario.videos       || []).map(v => v.uri ?? v),
+    ...(formulario.documentosAdicionales || []).map(d => d.uri ?? d),
   ];
   for (const uri of uris) {
     if (!uri?.startsWith('file://')) continue;
@@ -390,6 +397,8 @@ export async function iniciarWorker() {
   }
 
   console.log('[QueueWorker] Iniciado (foreground)');
+  // Carpetas de respaldo que ningún envío de la cola referencia (una vez por sesión).
+  leerCola().then(limpiarRespaldosHuerfanos).catch(() => {});
   _timer = setInterval(tick, INTERVALO_MS);
   tick();
 }

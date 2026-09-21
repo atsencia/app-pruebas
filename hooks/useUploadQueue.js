@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { encolar, obtenerEstadisticas, reintentarItem, limpiarCompletados } from '@/services/uploadQueue';
 import { suscribir, forzarProcesar } from '@/services/queueWorker';
+import { resguardarArchivos, liberarOriginales, borrarRespaldo } from '@/services/respaldoLocal';
 import { useAuth } from '@/contexts/AuthContext'; // ← falta este import
 
 
@@ -31,7 +32,21 @@ export function useUploadQueue() {
   }, [refrescar]);
 
   const agregarALaCola = useCallback(async (formulario) => {
-    const item = await encolar(formulario, user?.token);  // ← pasar token
+    // Los archivos se copian a una carpeta persistente (no a la caché, que
+    // Android puede vaciar) y ahí viven hasta que el backend confirme la carga.
+    const { formulario: conRespaldo, originales } = await resguardarArchivos(formulario);
+
+    let item;
+    try {
+      item = await encolar(conRespaldo, user?.token);  // ← pasar token
+    } catch (e) {
+      await borrarRespaldo(conRespaldo);   // no se encoló: no dejar la copia huérfana
+      throw e;
+    }
+
+    if (item) await liberarOriginales(originales);
+    else      await borrarRespaldo(conRespaldo);  // ya estaba en la cola: la copia sobra
+
     await refrescar();
     forzarProcesar(); // intentar subir inmediatamente
     return item;
