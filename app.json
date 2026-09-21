@@ -60,7 +60,14 @@
           "locationWhenInUsePermission": "Permite acceder a tu ubicación para georreferenciar el registro."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#1E3A5F"
+        }
+      ]
     ],
     "web": {
       "favicon": "./assets/images/favicon.png"

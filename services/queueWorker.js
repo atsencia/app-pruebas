@@ -1,7 +1,10 @@
 // services/queueWorker.js
+import { AppState } from 'react-native';
 import * as Network      from 'expo-network';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem   from 'expo-file-system/legacy';
+import * as Notifications from 'expo-notifications';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import {
   leerCola,
@@ -34,6 +37,58 @@ const MAX_PARALELOS = 2;
 let _timer     = null;
 let _enProceso = new Set();
 let _listeners = [];
+
+// ── Aviso al pasar a segundo plano con una subida activa ─────
+// El SFTP corre en el hilo de la app: si el SO la suspende (pantalla
+// bloqueada, usuario cambia de app, fabricante agresivo con la batería),
+// la transferencia muere sin aviso y el ítem queda huérfano (ver tick()).
+// No hay forma de evitar eso de raíz sin mover la subida a HTTP(S) con
+// background upload nativo, así que mientras tanto avisamos con:
+//  1) activateKeepAwakeAsync durante cada subida — evita que la pantalla
+//     se bloquee sola, la causa más común de interrupción.
+//  2) una notificación local apenas la app deja de estar en foreground
+//     con una subida en curso — es la única forma de que el aviso llegue
+//     si el usuario ya salió de la app.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList:   true,
+    shouldPlaySound:  false,
+    shouldSetBadge:   false,
+  }),
+});
+
+let _permisoNotifPedido = false;
+async function asegurarPermisoNotificacion() {
+  if (_permisoNotifPedido) return;
+  _permisoNotifPedido = true;
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') await Notifications.requestPermissionsAsync();
+  } catch (e) {
+    console.warn('[QueueWorker] No se pudo pedir permiso de notificaciones:', e.message);
+  }
+}
+
+async function avisarSegundoPlanoConSubida() {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Hay una subida en curso',
+        body:  'Si cerrás la app o el celular la manda a segundo plano ahora, la subida se puede interrumpir y va a tener que reintentar sola.',
+      },
+      trigger: null,
+    });
+  } catch (e) {
+    console.warn('[QueueWorker] No se pudo mostrar el aviso de segundo plano:', e.message);
+  }
+}
+
+AppState.addEventListener('change', (siguienteEstado) => {
+  if (siguienteEstado !== 'active' && _enProceso.size > 0) {
+    avisarSegundoPlanoConSubida();
+  }
+});
 
 // ── Suscripción para la UI ───────────────────────────────────
 export function suscribir(fn) {
@@ -131,6 +186,10 @@ async function procesarItem(item) {
   await actualizarEstado(item.id, ESTADO.SUBIENDO);
   notificar({ tipo: 'inicio', id: item.id });
 
+  const tagKeepAwake = `subida-${item.id}`;
+  await asegurarPermisoNotificacion();
+  await activateKeepAwakeAsync(tagKeepAwake).catch(() => {});
+
   try {
     // ✅ Sin Promise.race ni timeout arbitrario.
     //
@@ -211,6 +270,7 @@ async function procesarItem(item) {
 
   } finally {
     _enProceso.delete(item.id);
+    await deactivateKeepAwake(tagKeepAwake).catch(() => {});
   }
 }
 

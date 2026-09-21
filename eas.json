@@ -7,24 +7,29 @@
       "cache": {
         "disabled": true
       },
-      "channel": "preview"
+      "channel": "preview",
+      "environment": "preview"
     },
     "preview2": {
       "android": {
         "gradleCommand": ":app:assembleRelease"
       },
-      "channel": "preview2"
+      "channel": "preview2",
+      "environment": "preview"
     },
     "preview3": {
       "developmentClient": true,
-      "channel": "preview3"
+      "channel": "preview3",
+      "environment": "preview"
     },
     "preview4": {
       "distribution": "internal",
-      "channel": "preview4"
+      "channel": "preview4",
+      "environment": "preview"
     },
     "production": {
-      "channel": "production"
+      "channel": "production",
+      "environment": "production"
     }
   }
 }
