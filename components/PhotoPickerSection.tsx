@@ -67,8 +67,7 @@
 
   // Al inicio del componente, agrega:
   const [pendingUris, setPendingUris] = React.useState<string[]>([]);
-  const LOGO = require("../media/logo.png"); // ← ajusta tu ruta
-  const COMPANY = "Mi Empresa S.A.";                 // ← tu nombre
+  const LOGO = require("../media/logo.png"); // logo de Consorcio C.C.A. (marca de agua)
   const photosRef = React.useRef(photos);
   React.useEffect(() => { photosRef.current = photos; }, [photos]);
 
@@ -322,7 +321,6 @@
     <WatermarkProcessor
       key={uri}
       photoUri={uri}
-      companyName={COMPANY}
       logoUri={LOGO}
       onCapture={(processed) => onWatermarkDone(processed, uri)}
     />
