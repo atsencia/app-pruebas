@@ -1,0 +1,2 @@
+# Build de Gradle del módulo nativo (generado al compilar, no es fuente).
+android/build/

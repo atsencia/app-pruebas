@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { encolar, obtenerEstadisticas, reintentarItem, limpiarCompletados } from '@/services/uploadQueue';
 import { suscribir, forzarProcesar } from '@/services/queueWorker';
-import { resguardarArchivos, liberarOriginales, borrarRespaldo } from '@/services/respaldoLocal';
+import { asegurarCarpetaRespaldo, resguardarArchivos, liberarOriginales, borrarRespaldo } from '@/services/respaldoLocal';
 import { useAuth } from '@/contexts/AuthContext'; // ← falta este import
 
 
@@ -34,6 +34,8 @@ export function useUploadQueue() {
   const agregarALaCola = useCallback(async (formulario) => {
     // Los archivos se copian a una carpeta persistente (no a la caché, que
     // Android puede vaciar) y ahí viven hasta que el backend confirme la carga.
+    // Si aún no hay carpeta elegida en el teléfono, se ofrece elegirla (una vez por sesión).
+    await asegurarCarpetaRespaldo();
     const { formulario: conRespaldo, originales } = await resguardarArchivos(formulario);
 
     let item;

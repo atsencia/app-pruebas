@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import SSHClient from '@dylankenneally/react-native-ssh-sftp';
 import { Buffer } from 'buffer';
 import { API_BASE } from '../constants/api';
+import ActasStorage from '@/modules/actas-storage';
 
 // Overridable por .env.local (EXPO_PUBLIC_* — Expo las inyecta en el bundle)
 // para poder probar contra un SFTP/backend local sin tocar estos defaults.
@@ -388,7 +389,13 @@ async function subirConNombre(client, uriLocal, nombreRemoto, carpetaRemota, onP
   await FileSystem.makeDirectoryAsync(STAGING_DIR, { intermediates: true }).catch(() => {});
   const stagingUri = `${STAGING_DIR}${nombreRemoto}`;
 
-  await FileSystem.copyAsync({ from: uriLocal, to: stagingUri });
+  // Archivos de la carpeta de respaldo elegida por el usuario (content://): se
+  // copian con el módulo nativo (por flujo, sin cargar el video en memoria).
+  if (ActasStorage && uriLocal.startsWith('content://')) {
+    await ActasStorage.copiarAArchivo(uriLocal, stagingUri);
+  } else {
+    await FileSystem.copyAsync({ from: uriLocal, to: stagingUri });
+  }
   try {
     if (onProgreso) client.on('UploadProgress', (evt) => onProgreso(evt?.bytesTransfered ?? 0, evt?.totalBytes ?? 0));
     await client.sftpUpload(rutaLocalSinEsquema(stagingUri), carpetaRemota);
