@@ -22,6 +22,19 @@ interface Props {
   onClose: () => void;
 }
 
+// Solo se edita mientras Social no la haya pasado a interventoría: recibida
+// o devuelta al gestor. Mismo criterio que `editable` en getActa del backend.
+const ESTADOS_EDITABLES = ["recibida", "devuelta_gestor"];
+
+const ESTADO_REVISION_LABEL: Record<string, string> = {
+  recibida:                 "Recibida",
+  devuelta_gestor:          "Devuelta para corregir",
+  en_interventoria:         "En revisión de interventoría",
+  devuelta_interventoria:   "En revisión de Social",
+  confirmada_interventoria: "Confirmada por interventoría",
+  cerrada:                  "Cerrada",
+};
+
 const TIPO_CONFIG = {
   inicio: { label: "Inicio", bg: "#EFF6FF", text: "#1D4ED8" },
   seguimiento: { label: "Seguimiento", bg: "#FFFBEB", text: "#92400E" },
@@ -85,6 +98,11 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
       text: "#374151",
     };
 
+  const editable = !registro.estado_revision || ESTADOS_EDITABLES.includes(registro.estado_revision);
+  const estadoLabel = registro.estado_revision
+    ? ESTADO_REVISION_LABEL[registro.estado_revision] ?? registro.estado_revision
+    : null;
+
   return (
     <Modal
       visible={visible}
@@ -131,6 +149,11 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
         <InfoRow icon="mail" label="Correo prop." value={registro.prop_correo ?? "No registrado"} />
 
         <InfoRow icon="mail" label="Correo inter." value={registro.inter_correo ?? "No registrado"} />
+
+        {estadoLabel && <InfoRow icon="flag" label="Estado" value={estadoLabel} />}
+        {registro.estado_revision === "devuelta_gestor" && !!registro.nota_revision && (
+          <InfoRow icon="alert-circle" label="Qué corregir" value={registro.nota_revision} />
+        )}
 
         <View style={styles.divider} />
 
@@ -180,7 +203,8 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
           </Pressable>
           */}
 
-          {/* Botón editar acta */}
+          {/* Botón editar acta (solo mientras sea editable) */}
+          {editable ? (
             <Pressable
               style={({ pressed }) => [
                 styles.actionBtn,
@@ -213,6 +237,14 @@ export default function RegistroDetailSheet({ visible, registro, onClose }: Prop
               <Feather name="edit-2" size={16} color="#374151" />
               <Text style={styles.btnEditarText}>Editar acta</Text>
             </Pressable>
+          ) : (
+            <View style={[styles.actionBtn, styles.btnEditar, { opacity: 0.6 }]}>
+              <Feather name="lock" size={16} color="#374151" />
+              <Text style={styles.btnEditarText}>
+                {registro.estado_revision === "cerrada" ? "Acta cerrada: no se puede editar" : "En revisión: no se puede editar"}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </Modal>

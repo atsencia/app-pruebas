@@ -345,6 +345,18 @@ export default function FormScreen() {
         );
         if (!response.ok) throw new Error("No se pudo cargar el acta");
         const data = await response.json();
+        // Ya pasó a interventoría o está cerrada: no se edita (el backend lo
+        // marca con registro.editable; ver RevisionController.js).
+        if (data.registro?.editable === false) {
+          Alert.alert(
+            "No se puede editar",
+            data.registro.estado_revision === "cerrada"
+              ? "El acta ya está cerrada."
+              : "El acta está en revisión. Solo se puede editar si te la devuelven.",
+          );
+          router.back();
+          return;
+        }
         const f = data.acta;
         setField("tipoActa",    f.tipoActa    ?? "");
         // Sin selector de tipo de registro, al editar se respeta el del registro.

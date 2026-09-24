@@ -39,6 +39,11 @@ export type Registro = {
   prop_correo: string | null;  // ← renombrado
   inter_correo: string | null; // ← renombrado
   estado: string;
+  // Flujo de revisión del panel (recibida, devuelta_gestor, en_interventoria,
+  // devuelta_interventoria, confirmada_interventoria, cerrada). Puede faltar
+  // si el backend es una versión anterior.
+  estado_revision?: string;
+  nota_revision?: string | null;
 };
 
 export default function SearchScreen() {
