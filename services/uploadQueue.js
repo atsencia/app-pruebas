@@ -4,6 +4,7 @@
 // un formulario completo pendiente de subir al FTP.
 // ============================================================
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { generarIDUnico } from './FtpuploadServices';
 
 const QUEUE_KEY = 'ftp_upload_queue';
 
@@ -38,6 +39,16 @@ async function guardarCola(cola) {
 // Devuelve el ítem creado
 export async function encolar(formulario, token = null) {
   const cola = await leerCola();
+
+  // El ID de la carpeta se fija UNA vez, acá. Antes se inventaba en cada
+  // llamada a subirFormularioFTP, así que cada reintento de la cola (o la
+  // recuperación de una subida que se cortó) creaba otra carpeta en el
+  // servidor y el processor la registraba como un acta nueva: actas
+  // duplicadas, la primera a medias en 'borrador'. Con el ID fijo, un
+  // reintento vuelve a escribir en la misma carpeta.
+  if (!formulario.registro_uuid) {
+    formulario = { ...formulario, registro_uuid: generarIDUnico() };
+  }
 
   const yaExiste = cola.some(
     (i) => i.formulario.registro_uuid &&

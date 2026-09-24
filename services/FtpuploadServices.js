@@ -49,7 +49,8 @@ export async function validarSubidaBackend(carpeta, token) {
   }
 }
 
-function generarIDUnico() {
+// También lo usa uploadQueue.js para fijar el ID al encolar (ver encolar()).
+export function generarIDUnico() {
   const ahora = new Date();
   const fecha = ahora.toISOString().replace(/[-:T.]/g, '').substring(0, 15);
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();

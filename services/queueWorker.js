@@ -12,7 +12,7 @@ import {
   incrementarReintentos,
   ESTADO,
 } from './uploadQueue';
-import { subirFormularioFTP, validarSubidaBackend } from './FtpuploadServices';
+import { subirFormularioFTP, validarSubidaBackend, generarIDUnico } from './FtpuploadServices';
 import { borrarRespaldo, limpiarRespaldosHuerfanos } from './respaldoLocal';
 
 // ── Imports opcionales (no disponibles en Expo Go / web) ─────
@@ -190,7 +190,13 @@ async function procesarItem(item) {
   if (_enProceso.has(item.id)) return;
   _enProceso.add(item.id);
 
-  await actualizarEstado(item.id, ESTADO.SUBIENDO);
+  // Ítems encolados con una versión anterior del app no traen ID fijo:
+  // se les asigna uno y se guarda antes de subir, para que un reintento
+  // vuelva a la misma carpeta en vez de crear un acta duplicada.
+  if (!item.formulario.registro_uuid) {
+    item = { ...item, formulario: { ...item.formulario, registro_uuid: generarIDUnico() } };
+  }
+  await actualizarEstado(item.id, ESTADO.SUBIENDO, { formulario: item.formulario });
   notificar({ tipo: 'inicio', id: item.id });
 
   const tagKeepAwake = `subida-${item.id}`;
