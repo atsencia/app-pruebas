@@ -211,9 +211,19 @@ async function construirListaMultimedia(formulario) {
   for (const f of firmasConfig) {
     if (!f.raw) continue;
 
-    // Determinar extensión antes de resolver URI
-    const esSVG = f.raw.startsWith('<svg') || f.raw.startsWith('<?xml') || (typeof f.raw === 'string' && f.raw.includes('M') && !esBase64Valido(f.raw) && !esURLRemota(f.raw));
-    const ext = esSVG ? 'svg' : 'png';
+    // Determinar extensión antes de resolver URI. Una data URI (la firma con
+    // el nombre es un PNG data:image/png) o un archivo/URL (al editar, la firma
+    // ya subida) conservan su formato; antes caían en la regla de "tiene una M
+    // → paths SVG" y se subían como .svg aunque fueran PNG.
+    let ext;
+    if (f.raw.startsWith('data:image/')) {
+      ext = f.raw.startsWith('data:image/svg') ? 'svg' : 'png';
+    } else if (esURLRemota(f.raw) || f.raw.startsWith('file://')) {
+      ext = extDeURI(f.raw, 'png');
+    } else {
+      const esSVG = f.raw.startsWith('<svg') || f.raw.startsWith('<?xml') || (f.raw.includes('M') && !esBase64Valido(f.raw));
+      ext = esSVG ? 'svg' : 'png';
+    }
     const nombreArchivo = `${f.nombre}.${ext}`;
 
     const uriLocal = await firmaAUriLocal(f.raw, nombreArchivo);

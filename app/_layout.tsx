@@ -5,6 +5,7 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
+import { GreatVibes_400Regular } from "@expo-google-fonts/great-vibes";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -39,6 +40,8 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    // Cursiva de "Firmar con el nombre" (components/SignaturePad.tsx).
+    GreatVibes_400Regular,
   });
 useEffect(() => {
   iniciarWorker();

@@ -1372,7 +1372,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           </Field>
            
           <Field label="Firma">
-            <SignaturePad onSignatureChange={(sig) => setFirmaProp("firma", sig)} />
+            <SignaturePad nombre={form.firmaPropietarioPredio.nombre} onSignatureChange={(sig) => setFirmaProp("firma", sig)} />
           </Field>
           {form.firmaPropietarioPredio.firma && (
             <View style={styles.sigConfirm}>
@@ -1405,7 +1405,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               value={form.firmaConcesionario.cargo} onChangeText={(v) => setFirma("firmaConcesionario", "cargo", v)} />
           </Field>
           <Field label="Firma">
-            <SignaturePad onSignatureChange={(sig) => setFirma("firmaConcesionario", "firma", sig)} />
+            <SignaturePad nombre={form.firmaConcesionario.nombre} onSignatureChange={(sig) => setFirma("firmaConcesionario", "firma", sig)} />
           </Field>
           {form.firmaConcesionario.firma && (
             <View style={styles.sigConfirm}>
@@ -1438,7 +1438,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               value={form.firmaProfesional.cargo} onChangeText={(v) => setFirma("firmaProfesional", "cargo", v)} />
           </Field>
           <Field label="Firma">
-            <SignaturePad onSignatureChange={(sig) => setFirma("firmaProfesional", "firma", sig)} />
+            <SignaturePad nombre={form.firmaProfesional.nombre} onSignatureChange={(sig) => setFirma("firmaProfesional", "firma", sig)} />
           </Field>
           {form.firmaProfesional.firma && (
             <View style={styles.sigConfirm}>
