@@ -272,15 +272,30 @@ async function construirListaMultimedia(formulario) {
   for (let i = 0; i < documentos.length; i++) {
     const doc = documentos[i];
     const uri = doc.uri ?? doc;
-    if (!esURILocal(uri)) continue;
     const nombreRemoto = `documento_${String(i + 1).padStart(3, '0')}.${extDeURI(uri, 'pdf')}`;
-    lista.push({
-      uriLocal:     uri,
-      nombreRemoto,
-      categoria:    'documentos',
-      descripcion:  doc.descripcion || doc.nombre || `Documento ${i + 1}`,
-      esTemporal:   false,
-    });
+    const descripcion = doc.descripcion || doc.nombre || `Documento ${i + 1}`;
+
+    if (esURILocal(uri)) {
+      lista.push({
+        uriLocal:     uri,
+        nombreRemoto,
+        categoria:    'documentos',
+        descripcion,
+        esTemporal:   false,
+      });
+    } else if (esURLRemota(uri)) {
+      // Edición: el documento ya está en el servidor, se re-descarga para resubirlo
+      const uriLocal = await descargarURLATemp(uri, `_tmp_${nombreRemoto}`);
+      if (uriLocal) {
+        lista.push({
+          uriLocal,
+          nombreRemoto,
+          categoria:    'documentos',
+          descripcion,
+          esTemporal:   true,
+        });
+      }
+    }
   }
   return lista;
 }

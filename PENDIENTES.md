@@ -27,6 +27,25 @@ emulador con la app completa, iniciando sesión y llenando un acta de verdad):
 - [ ] Probar en un teléfono real (no solo el emulador) — Android 11+ tiene
       restricciones de SAF que el emulador podría no reproducir igual.
 
+## Documentos adicionales se pierden al editar un acta
+
+Encontrado el 2026-09-28. Al editar un acta ya subida (p. ej. una que
+devolvieron), `app/form.tsx` carga fotos, fachada, videos y firmas desde
+`GET /api/registros/:uuid/acta`, pero **no** carga `multimedia.documentos`.
+Además, `construirListaMultimedia` en `services/FtpuploadServices.js` salta
+los documentos que no son locales (`if (!esURILocal(uri)) continue;`). Por eso,
+al re-subir el acta, el nuevo `datos.json` sale sin los documentos anexos que
+tenía. Los archivos siguen en la carpeta del servidor, pero el acta ya no los
+lista.
+
+- [x] En `cargarActa` (`app/form.tsx`), cargar `data.multimedia.documentos`
+      en `documentosAdicionales` (con su `url`, nombre y descripción).
+- [x] En `construirListaMultimedia`, para los documentos con URL remota:
+      descargarlos con `descargarURLATemp` y re-subirlos, igual que hoy se hace
+      con fotos y videos.
+- [ ] Probarlo: editar un acta con documentos, re-subirla y confirmar que el
+      acta los sigue mostrando.
+
 ## Push
 
 - [x] 2026-09-22: pusheados a `origin/master` los 3 commits que ya estaban

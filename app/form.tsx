@@ -411,6 +411,11 @@ export default function FormScreen() {
         setField("videos", data.multimedia?.videos?.map((v: any) => ({
           uri: v.url, thumbnail: null, duration: null, filename: v.nombre,
         })) ?? []);
+        // Sin esto, al re-subir el acta el datos.json nuevo salía sin los
+        // documentos anexos que ya tenía.
+        setField("documentosAdicionales", data.multimedia?.documentos?.map((d: any) => ({
+          uri: d.url, nombre: d.nombre, descripcion: d.descripcion ?? "",
+        })) ?? []);
       } catch (e: any) {
         Alert.alert("Error", "No se pudo cargar el acta para editar");
       } finally {
