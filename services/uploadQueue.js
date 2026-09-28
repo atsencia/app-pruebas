@@ -5,6 +5,7 @@
 // ============================================================
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generarIDUnico } from './FtpuploadServices';
+import { borrarRespaldo } from './respaldoLocal';
 
 const QUEUE_KEY = 'ftp_upload_queue';
 
@@ -24,7 +25,21 @@ export const ESTADO = {
 export async function leerCola() {
   try {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const cola = raw ? JSON.parse(raw) : [];
+    // Colas de versiones anteriores: el reenvío de un acta devuelta quedaba
+    // con el mismo id que el envío original y nunca avanzaba (ver encolar()).
+    // Se le da un id propio (determinístico, así no cambia entre lecturas).
+    const vistos = new Set();
+    let cambio = false;
+    cola.forEach((item, idx) => {
+      if (vistos.has(item.id)) {
+        item.id = `${item.id}__dup${idx}`;
+        cambio = true;
+      }
+      vistos.add(item.id);
+    });
+    if (cambio) await guardarCola(cola);
+    return cola;
   } catch {
     return [];
   }
@@ -50,15 +65,23 @@ export async function encolar(formulario, token = null) {
     formulario = { ...formulario, registro_uuid: generarIDUnico() };
   }
 
-  const yaExiste = cola.some(
-    (i) => i.formulario.registro_uuid &&
-           i.formulario.registro_uuid === formulario.registro_uuid &&
-           i.estado !== ESTADO.COMPLETADO
+  // Un acta que ya se había enviado desde este teléfono (p. ej. la devolvieron
+  // y se corrige) deja su envío anterior en la cola, marcado 'completado',
+  // con el mismo registro_uuid. Antes el nuevo envío se agregaba con el mismo
+  // id y todo lo que actualiza por id (actualizarEstado, incrementarReintentos)
+  // pegaba en el ítem viejo: el nuevo quedaba 'pendiente' para siempre y se
+  // volvía a subir en cada tick ("se queda cargando y nunca sube"). Ahora el
+  // envío nuevo REEMPLAZA a los anteriores de esa acta que no estén en curso
+  // (completados, en error o todavía pendientes) y lleva un id propio.
+  const uuid = formulario.registro_uuid;
+  const reemplazables = [ESTADO.COMPLETADO, ESTADO.ERROR, ESTADO.PENDIENTE];
+  const reemplazados = cola.filter(
+    (i) => i.formulario.registro_uuid === uuid && reemplazables.includes(i.estado)
   );
-  if (yaExiste) return null;
+  const restante = cola.filter((i) => !reemplazados.includes(i));
 
   const item = {
-    id:          formulario.registro_uuid || `local_${Date.now()}`,
+    id:          `${uuid}__${Date.now()}`,
     formulario,
     token,        // ← agregar acá
     estado:      ESTADO.PENDIENTE,
@@ -67,8 +90,16 @@ export async function encolar(formulario, token = null) {
     ultimoError: null,
   };
 
-  cola.push(item);
-  await guardarCola(cola);
+  restante.push(item);
+  await guardarCola(restante);
+
+  // La copia local de un envío reemplazado que no llegó a completarse ya no
+  // la referencia nadie (el nuevo envío trae su propia copia).
+  for (const viejo of reemplazados) {
+    if (viejo.estado !== ESTADO.COMPLETADO) {
+      await borrarRespaldo(viejo.formulario).catch(() => {});
+    }
+  }
   return item;
 }
 

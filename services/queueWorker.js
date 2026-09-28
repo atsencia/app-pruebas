@@ -295,7 +295,7 @@ async function reverificarItem(item) {
   _enProceso.add(item.id);
 
   try {
-    const carpeta = item.carpetaFtp || item.id;
+    const carpeta = item.carpetaFtp || item.formulario.registro_uuid || item.id;
     const confirmacion = await validarSubidaBackend(carpeta, item.token);
 
     if (confirmacion.completo) {
@@ -358,8 +358,15 @@ async function tick() {
   );
   verificando.forEach(item => reverificarItem(item));
 
+  // Un envío nuevo de un acta cuyo envío anterior todavía se está subiendo
+  // (misma carpeta en el servidor) espera a que ese termine, para que los dos
+  // no escriban a la vez en la misma carpeta.
+  const uuidsSubiendo = new Set(
+    cola.filter(i => i.estado === ESTADO.SUBIENDO).map(i => i.formulario.registro_uuid)
+  );
   const pendientes = cola.filter(
-    i => i.estado === ESTADO.PENDIENTE && !_enProceso.has(i.id)
+    i => i.estado === ESTADO.PENDIENTE && !_enProceso.has(i.id) &&
+         !uuidsSubiendo.has(i.formulario.registro_uuid)
   );
   if (pendientes.length === 0) return;
 
