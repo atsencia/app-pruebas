@@ -12,6 +12,8 @@ export interface FTPFormulario {
   extra?: Record<string, any>;
 }
 
+export function generarIDUnico(): string;
+
 export interface FTPResultado {
   success: boolean;
   id: string;

@@ -31,6 +31,7 @@ const initialFormData = {
   tipoRegistro:    'normal',   // 'normal' | 'acta_madre' | 'zona_proyecto'
   codigoProyecto:  '',         // ej. 'movistar_arena_2025'
   encabezadoVersion: null,     // versión del encabezado con la que se llenó una zona (V1, V2…)
+  actaMadreUuid:   null,       // zona: UUID del acta madre de su lote (ver iniciarLote)
 planTopografico: false,
 observacionesProfesional: "",  // ← agrégala de vuelta
   fotos: [], fotosFachada: [], videos: [], documentosAdicionales: [],
@@ -151,18 +152,22 @@ export const versionesDeLote = (lote) => {
 export const useLoteMovistarArena = create(
   persist(
     (set, get) => ({
-      // { codigoProyecto, cabecera, iniciadoEn, totalZonas, versiones, versionActiva } | null
+      // { codigoProyecto, actaMadreUuid, cabecera, iniciadoEn, totalZonas, versiones, versionActiva } | null
       // `cabecera` siempre es la de la versión activa.
       loteActivo: null,
 
       // Se llama al enviar la ACTA MADRE: fija la cabecera del lote (V1).
-      iniciarLote: (formData) => {
+      // `actaMadreUuid` es el UUID con el que se sube la madre: cada zona lo
+      // manda para que el servidor la ligue a ESTA madre y no a otra del
+      // mismo proyecto (inicio/seguimiento/cierre, o un lote de otro año).
+      iniciarLote: (formData, actaMadreUuid) => {
         const cabecera = {};
         CAMPOS_CABECERA_LOTE.forEach(k => { cabecera[k] = formData[k]; });
         const ahora = new Date().toISOString();
         set({
           loteActivo: {
             codigoProyecto: formData.codigoProyecto || CODIGO_PROYECTO_MOVISTAR,
+            actaMadreUuid,
             cabecera,
             iniciadoEn: ahora,
             totalZonas: 0,

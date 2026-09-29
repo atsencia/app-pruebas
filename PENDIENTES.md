@@ -137,6 +137,65 @@ Implementado el 2026-09-28 en `backend-vecindad`:
       link y cerrar.
 - [ ] ¿Las actas madre también deben exigir estas firmas y datos? Hoy sí.
 
+## Movistar Arena: firmas de los directores por lote (decidido 2026-09-29)
+
+**El caso:** las actas del lote (≈300 zonas × inicio/seguimiento/cierre,
+hasta ~6000) las levanta en sitio el personal de campo, que firma ahí. Pero
+los firmantes "oficiales" son los mismos directores para todo el lote
+(interventoría, Movistar, Sencia). Firmar en sitio está bien.
+
+**Lo decidido:**
+- En observaciones queda siempre quién estuvo y firmó en sitio (los dos
+  profesionales y el delegado de interventoría), aunque después la firma
+  del recuadro se reemplace por una hecha por link.
+- Los datos del propietario y de los directores (incluido el delegado de
+  interventoría) se llenan en el acta madre y pasan a todas las zonas (la
+  firma del propietario no).
+- Si los directores quieren firmar, se les manda **un link por lote** y
+  firman **todas** las actas de una vez (sin desmarcar: la revisión ya la
+  hacen Sencia e Interventoría). La firma queda en el recuadro de cada acta.
+- Las actas normales siguen con firmas individuales.
+
+- [x] **a)** Observaciones: `acta_data.js` agrega "Personal en sitio:" con
+      nombre, cargo y cédula de lo capturado en el app (concesionario,
+      profesional, delegado de interventoría). Probado en local.
+- [ ] **b)** App: el acta madre del lote Movistar lleva propietario y los
+      datos de los directores; cada zona los hereda (hoy solo hereda el
+      encabezado del predio, ver `CAMPOS_CABECERA_LOTE`).
+- [x] **c)** Backend + panel: link por lote (2026-09-29).
+      Botón "Firmas del lote" en el acta madre → `POST
+      /api/registros/:uuid/enviar-firma-lote` crea un token por acta que se
+      pueda firmar, todos con el mismo `firma_tokens.lote` (migración
+      `migrate_2026-09-firma-lote.sql`, agregada al deploy). La página de
+      firma lista las actas (`GET /api/firma/lote`) y al firmar se guarda
+      en cada una (`cargarFirmaLote`). Probado en local con el acta madre;
+      falta probar un lote con varias zonas abiertas y el panel en el
+      navegador.
+- [x] Varias actas madre del mismo proyecto (inicio/seguimiento/cierre, o
+      un lote nuevo al año): antes cada zona se ligaba a la madre MÁS
+      RECIENTE del código de proyecto, así que con dos madres abiertas las
+      zonas podían caer en la equivocada. Ahora el app manda
+      `formulario.actaMadreUuid` (lo guarda el lote activo al enviar la
+      madre) y `processor.py` (`buscar_acta_madre`) liga por ese UUID. Las
+      zonas de versiones viejas del app siguen con la regla anterior.
+- [x] Probado en local (2026-09-29) con un lote de prueba insertado a mano
+      (`20260929PRUEBA*`): madre de inicio + 3 zonas, madre de seguimiento
+      + 2 zonas, y una zona "vieja" sin UUID. Las zonas quedaron con su
+      madre; los 4 links por lote firmaron las actas de inicio y no
+      tocaron las de seguimiento; interventoría dejó fuera la zona sin
+      confirmar y la firmó después con un link nuevo; las observaciones
+      muestran el personal en sitio y los recuadros a los directores.
+- [ ] El celular guarda UN lote activo: no se puede ir alternando entre el
+      lote de inicio y el de seguimiento en el mismo teléfono (iniciar una
+      madre nueva reemplaza el lote). ¿Hace falta?
+- [ ] Los cambios del app (UUID de la madre) necesitan un build nuevo.
+- [x] Qué recuadro llena cada director: interventoría → Interventoría;
+      Movistar → propietario; Sencia → concesionario; representante legal
+      de la empresa que inspeccionó → profesional técnico. Si un director
+      no firma, queda la firma de quien estuvo en sitio.
+- [ ] Espacio: ~6000 actas × lo que pesen fotos y videos (el acta 17 local
+      pesa 16 MB → ~100 GB). Revisar `df -h` en prod.
+
 ## Push
 
 - [x] 2026-09-22: pusheados a `origin/master` los 3 commits que ya estaban

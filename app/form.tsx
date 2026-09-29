@@ -27,6 +27,7 @@ import { API_BASE } from "@/constants/api";
 import { useLocalSearchParams } from "expo-router";
 import { useFormStore, useBorradores  } from '../store/zustand-state';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
+import { generarIDUnico } from '@/services/FtpuploadServices';
 import QueueStatusBar from '@/components/QueueStatusBar';
 import LoteMovistarArena from '@/components/LoteMovistarArena';
 import { useLoteMovistarArena, CODIGO_PROYECTO_MOVISTAR, versionesDeLote } from '@/store/zustand-state';
@@ -127,6 +128,7 @@ export interface FormData {
   tipoRegistro:   'normal' | 'acta_madre' | 'zona_proyecto';
   codigoProyecto: string;
   encabezadoVersion: number | null;
+  actaMadreUuid: string | null;
 }
 
 interface FieldErrors {
@@ -363,6 +365,7 @@ export default function FormScreen() {
         setField("tipoRegistro",      f.tipoRegistro      ?? "normal");
         setField("codigoProyecto",    f.codigoProyecto    ?? "");
         setField("encabezadoVersion", f.encabezadoVersion ?? null);
+        setField("actaMadreUuid",     f.actaMadreUuid     ?? null);
         setField("nombre",      f.nombre      ?? "");
         setField("cedula",      f.cedula      ?? "");
         setField("direccion",   f.direccion   ?? "");
@@ -512,6 +515,9 @@ export default function FormScreen() {
       clearForm();
       setField('tipoRegistro', 'zona_proyecto');
       setField('codigoProyecto', loteActivo.codigoProyecto);
+      // Lotes iniciados antes de guardar el UUID no lo tienen: el servidor
+      // usa entonces la madre más reciente del proyecto.
+      setField('actaMadreUuid', loteActivo.actaMadreUuid ?? null);
       aplicarCabecera(loteActivo.cabecera, loteActivo.versionActiva ?? 1, true);
       closeSidebar();
       setTimeout(() => router.replace('/form'), 240);
@@ -679,6 +685,8 @@ export default function FormScreen() {
       codigoProyecto: form.codigoProyecto || null,
       // Versión del encabezado con la que se llenó la zona (V1, V2…); solo aplica a zonas.
       encabezadoVersion: esZona ? (form.encabezadoVersion ?? null) : null,
+      // UUID del acta madre de la zona: el servidor la liga a esa madre exacta.
+      actaMadreUuid: esZona ? (form.actaMadreUuid ?? null) : null,
   });
 
   // ── Submit ──────────────────────────────────
@@ -701,12 +709,14 @@ export default function FormScreen() {
         videos:        form.videos.map((v: any) => ({ uri: v.uri })),
         documentosAdicionales,
         extra:         buildDatos(), //lo q dice el pana claudio
-        registro_uuid: isEditing ? registro_uuid : undefined,
+        // Un acta madre nueva sale con su UUID ya fijo, para guardarlo en el
+        // lote activo (sus zonas lo mandan). Las demás lo reciben al encolarse.
+        registro_uuid: isEditing ? registro_uuid : (esMadre ? generarIDUnico() : undefined),
         revisado_por:  user?.username ?? null,
       };
       await agregarALaCola(formulario);
       if (esMadre && form.codigoProyecto === CODIGO_PROYECTO_MOVISTAR) {
-        iniciarLote(form);
+        iniciarLote(form, formulario.registro_uuid);
       } else if (
         esZona &&
         form.codigoProyecto === CODIGO_PROYECTO_MOVISTAR &&
