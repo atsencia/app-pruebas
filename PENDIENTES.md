@@ -46,6 +46,46 @@ lista.
 - [ ] Probarlo: editar un acta con documentos, re-subirla y confirmar que el
       acta los sigue mostrando.
 
+## Volver a pedir una firma por link (decidido, sin implementar)
+
+Decidido el 2026-09-28. Todo el trabajo es en `backend-vecindad`: la API y el
+panel. El app no cambia.
+
+**Hoy:** una firma hecha por link es definitiva. Si firmó la persona
+equivocada o con datos mal escritos, no hay forma de corregirla desde el panel.
+
+**Lo decidido:** que Social pueda mandar un link nuevo a un firmante que ya
+firmó. La firma nueva reemplaza a la anterior (vale solo la última) y,
+mientras no se firme el link nuevo, la anterior sigue valiendo, así que el
+acta nunca queda sin firma. No hay botón de "anular" aparte.
+Con el acta `cerrada` no se puede: eso ya lo bloquean `enviarLinkFirma` y
+`cargarFirma`.
+
+**El historial sale solo:** cada firma queda en su propio archivo
+(`firma_link_<firmante>_<timestamp>.png`, ver `guardarImagenFirma`) y cada
+link en `firma_tokens` (quién, cuándo, `usado`, `firmado_en`). Al firmar,
+`guardarFirma*` sobrescribe las columnas del firmante en `registros`, así
+que la última gana sin más lógica. `invalidarTokensAnteriores` ya desactiva
+los links viejos que no se usaron.
+
+- [ ] `enviarLinkFirma` (`usercontroller.js`): quitar el 409 "ya firmó por
+      link; esa firma es la definitiva". Si ya firmó, pedir `reemplazar: true`
+      en el body (así el panel obliga a confirmar) y responder 409 con la fecha
+      de la firma actual si no viene.
+- [ ] `cargarFirma` (`Firma.js`): quitar el bloqueo "Este firmante ya firmó
+      el acta". Basta con que el token esté activo y sin usar.
+- [ ] Panel: con la firma ya puesta, el botón pasa a "Pedir firma de nuevo" y
+      pide confirmar: "X ya firmó el DD/MM. Si firma de nuevo, esa firma
+      reemplaza la anterior. ¿Continuar?". Permitir cambiar el correo.
+- [ ] (Opcional) En el detalle del acta, mostrar las firmas anteriores
+      (fecha y nombre) a partir de `firma_tokens`.
+- [ ] Por decidir: ¿se permite en `confirmada_interventoria`, o solo antes?
+      Y si la firma cambia después de mandar el acta al Excel (Power
+      Automate), ¿hay que volver a mandarla?
+- [ ] Probar: firmar → pedir de nuevo → el acta sigue con la vieja → firmar
+      el link nuevo → queda la nueva. El link viejo sin usar ya no sirve, y
+      con el acta cerrada no deja pedirla.
+
 ## Push
 
 - [x] 2026-09-22: pusheados a `origin/master` los 3 commits que ya estaban
