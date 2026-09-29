@@ -587,6 +587,10 @@ export default function FormScreen() {
   const esZona    = form.tipoRegistro === 'zona_proyecto';
   const esMadre   = form.tipoRegistro === 'acta_madre';
   const esNormal  = form.tipoRegistro === 'normal';
+  // Una zona es del mismo tipo que su acta madre: si la madre es la del lote
+  // activo, el selector queda fijo (el processor lo fuerza igual en el servidor).
+  const tipoActaDeMadre = esZona && !!form.actaMadreUuid &&
+    loteActivo?.actaMadreUuid === form.actaMadreUuid ? (loteActivo?.tipoActa || '') : '';
   // En una zona con lote activo, propietario / interventoría / predio /
   // servicios / uso / acceso vienen del encabezado y se ocultan (se revisan y
   // editan desde el popup). Sin lote no hay de dónde precargarlos: se muestran.
@@ -850,9 +854,11 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
               style={({ pressed }) => [
                 styles.tipoActaBtn,
                 active && styles.tipoActaBtnActive,
-                pressed && { opacity: 0.8 },
+                tipoActaDeMadre && !active && { opacity: 0.45 },
+                pressed && !tipoActaDeMadre && { opacity: 0.8 },
               ]}
               onPress={() => set("tipoActa", opt.value)}
+              disabled={!!tipoActaDeMadre}
             >
               <Text style={[styles.tipoActaBtnText, active && styles.tipoActaBtnTextActive]}>
                 {opt.label}
@@ -861,6 +867,9 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           );
         })}
       </View>
+      {!!tipoActaDeMadre && (
+        <Text style={styles.tipoActaNota}>Es el mismo tipo de su acta madre.</Text>
+      )}
     </View>
 
         {/* 1. DATOS DEL PROPIETARIO, */}
@@ -1245,25 +1254,25 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           <ToggleField label="Fisuras cerradas" description="Discontinuidad cerrada que no afecta la calidad estructural."
             value={form.fisurasCerradas} onChange={(v) => set("fisurasCerradas", v)} />
           {form.fisurasCerradas && (
-            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputCrece, styles.inputIndented]}
               placeholder="Descripción de ubicación y alcance..." placeholderTextColor={C.textSecondary}
-              value={form.fisurasCerradasDesc} onChangeText={(v) => set("fisurasCerradasDesc", v)} multiline numberOfLines={2} />
+              value={form.fisurasCerradasDesc} onChangeText={(v) => set("fisurasCerradasDesc", v)} multiline />
           )}
           <View style={styles.divider} />
           <ToggleField label="Fisuras abiertas" description="Discontinuidad abierta (0.2–2.0 mm) que puede afectar la estabilidad."
             value={form.fisurasAbiertas} onChange={(v) => set("fisurasAbiertas", v)} />
           {form.fisurasAbiertas && (
-            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputCrece, styles.inputIndented]}
               placeholder="Descripción de ubicación y alcance..." placeholderTextColor={C.textSecondary}
-              value={form.fisurasAbiertasDesc} onChangeText={(v) => set("fisurasAbiertasDesc", v)} multiline numberOfLines={2} />
+              value={form.fisurasAbiertasDesc} onChangeText={(v) => set("fisurasAbiertasDesc", v)} multiline />
           )}
           <View style={styles.divider} />
           <ToggleField label="Grietas" description="Discontinuidad abierta (>2.0 mm, prof. >10 mm) que afecta estabilidad."
             value={form.grietas} onChange={(v) => set("grietas", v)} />
           {form.grietas && (
-            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputIndented]}
+            <TextInput style={[styles.input, styles.inputMultilineSmall, styles.inputCrece, styles.inputIndented]}
               placeholder="Descripción de ubicación y alcance..." placeholderTextColor={C.textSecondary}
-              value={form.grietasDesc} onChangeText={(v) => set("grietasDesc", v)} multiline numberOfLines={2} />
+              value={form.grietasDesc} onChangeText={(v) => set("grietasDesc", v)} multiline />
           )}
         </Section>
   )}
@@ -1544,6 +1553,10 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           </View>
         )}
 
+        {esMadre && (
+          <InfoBox text="Esta es el acta principal del predio: de ella salen las actas de cada zona. Por eso aquí no se pide más material audiovisual; las fotos y videos se toman en cada zona." />
+        )}
+
         {/* PREGUARDADO */}
         <Pressable
           style={({ pressed }) => [styles.preguardadoBtn, pressed && styles.submitBtnPressed]}
@@ -1818,6 +1831,7 @@ const styles = StyleSheet.create({
   tipoActaBtnActive:     { backgroundColor: C.primary, borderColor: C.primary },
   tipoActaBtnText:       { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
   tipoActaBtnTextActive: { color: "#fff" },
+  tipoActaNota:          { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: -4 },
 
   encabezadoCard: { backgroundColor: C.card, borderRadius: 20, padding: 18, gap: 12,
     borderWidth: 1.5, borderColor: C.primary + "30",
@@ -1861,6 +1875,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, fontFamily: "Inter_400Regular", color: C.text },
   inputMultiline:      { minHeight: 82, textAlignVertical: "top", paddingTop: 13 },
   inputMultilineSmall: { minHeight: 58, textAlignVertical: "top", paddingTop: 13 },
+  // Crece con el texto hasta 3 veces su alto inicial; de ahí en adelante hace scroll por dentro.
+  inputCrece:          { maxHeight: 58 * 3 },
   inputIndented:  { marginTop: 8, borderLeftWidth: 3, borderLeftColor: C.primary + "55", borderRadius: 10, backgroundColor: C.primary + "08" },
   inputError:     { borderColor: C.error, backgroundColor: C.error + "0A" },
   inputLocked:    { backgroundColor: C.inputBg, borderColor: C.border, color: C.textSecondary, opacity: 0.65 },
