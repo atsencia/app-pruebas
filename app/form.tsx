@@ -142,6 +142,20 @@ interface FieldErrors {
 // CONSTANTES
 // ─────────────────────────────────────────────
 
+// El backend arma las URLs de fotos/videos/firmas con el host de la petición y
+// un prefijo "/backend/" fijo, que solo existe detrás del nginx del dominio
+// principal: por :9000 (donde pega el app) esa ruta da 404, las miniaturas
+// salen en blanco y, al re-subir un acta editada, esos archivos no se podían
+// bajar y se perdían. Igual que el panel (acta_data.js: urlLocal), nos
+// quedamos con el tramo "/api/registros/..." sobre el API_BASE del app.
+const urlDelServidor = (url?: string | null) => {
+  if (typeof url !== "string") return url;
+  const i = url.indexOf("/api/registros/");
+  return i === -1 ? url : `${API_BASE}${url.slice(i)}`;
+};
+const conFirmaLocal = <T extends { firma?: string | null }>(firmante?: T | null) =>
+  firmante ? { ...firmante, firma: urlDelServidor(firmante.firma) ?? null } : firmante;
+
 const TIPO_ACTA_OPTIONS: { value: FormData["tipoActa"]; label: string }[] = [
   { value: "inicio",      label: "Inicio"      },
   { value: "seguimiento", label: "Seguimiento" },
@@ -371,6 +385,12 @@ export default function FormScreen() {
         setField("nombre",      f.nombre      ?? "");
         setField("cedula",      f.cedula      ?? "");
         setField("direccion",   f.direccion   ?? "");
+        // Una zona sube solo su "Zona / Unidad" como dirección y el processor la
+        // guarda ya concatenada con la de la madre. Al editarla se precarga esa
+        // dirección completa en el campo de la zona: antes quedaba vacío y al
+        // re-subir el acta quedaba sin dirección (el processor no vuelve a
+        // concatenar en una carpeta que ya existe).
+        if (f.tipoRegistro === "zona_proyecto") setField("zonaDesc", f.direccion ?? "");
         setField("telefono",    f.telefono    ?? "");
         setField("propCorreo",  f.firmaPropietario?.correo   ?? "");
         setField("interCorreo", f.firmaInterventoria?.correo ?? "");
@@ -404,22 +424,22 @@ export default function FormScreen() {
         setField("verticalidadNotas", f.verticalidadNotas ?? "");
         setField("planTopografico",          f.planTopografico          ?? false);
         setField("observacionesProfesional", f.observacionesProfesional ?? "");
-        setField("firmaConcesionario",     f.firmaConcesionario     ?? { nombre: "", cedula: "", cargo: "", firma: null });
-        setField("firmaProfesional",       f.firmaProfesional       ?? { nombre: "", cedula: "", cargo: "", firma: null });
-        setField("firmaPropietarioPredio", f.firmaPropietarioPredio ?? { nombre: "", correo: "", celular: "", firma: null });
+        setField("firmaConcesionario",     conFirmaLocal(f.firmaConcesionario)     ?? { nombre: "", cedula: "", cargo: "", firma: null });
+        setField("firmaProfesional",       conFirmaLocal(f.firmaProfesional)       ?? { nombre: "", cedula: "", cargo: "", firma: null });
+        setField("firmaPropietarioPredio", conFirmaLocal(f.firmaPropietarioPredio) ?? { nombre: "", correo: "", celular: "", firma: null });
         setField("fotos", data.multimedia?.fotos?.map((ff: any) => ({
-          uri: ff.url, descripcion: ff.descripcion ?? "",
+          uri: urlDelServidor(ff.url), descripcion: ff.descripcion ?? "",
         })) ?? []);
         setField("fotosFachada", data.multimedia?.fotosFachada?.map((ff: any) => ({
-          uri: ff.url, descripcion: ff.descripcion ?? "",
+          uri: urlDelServidor(ff.url), descripcion: ff.descripcion ?? "",
         })) ?? []);
         setField("videos", data.multimedia?.videos?.map((v: any) => ({
-          uri: v.url, thumbnail: null, duration: null, filename: v.nombre,
+          uri: urlDelServidor(v.url), thumbnail: null, duration: null, filename: v.nombre,
         })) ?? []);
         // Sin esto, al re-subir el acta el datos.json nuevo salía sin los
         // documentos anexos que ya tenía.
         setField("documentosAdicionales", data.multimedia?.documentos?.map((d: any) => ({
-          uri: d.url, nombre: d.nombre, descripcion: d.descripcion ?? "",
+          uri: urlDelServidor(d.url), nombre: d.nombre, descripcion: d.descripcion ?? "",
         })) ?? []);
       } catch (e: any) {
         Alert.alert("Error", "No se pudo cargar el acta para editar");
