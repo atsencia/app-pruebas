@@ -195,7 +195,10 @@ los firmantes "oficiales" son los mismos directores para todo el lote
 - [ ] Probar "Elegir acta madre" en el app (emulador o teléfono) contra el
       backend local: elegir la madre de seguimiento de prueba (25), crear
       una zona y ver que llegue ligada a la 25.
-- [ ] Los cambios del app (UUID de la madre) necesitan un build nuevo.
+- [ ] Los cambios del app (UUID de la madre y "Elegir acta madre")
+      necesitan un build nuevo. Antes de repartirlo, el backend tiene que
+      estar desplegado con `GET /api/lotes/madres` (backend `20183dc`); si
+      no, el modal de "Elegir acta madre" falla.
 - [x] Qué recuadro llena cada director: interventoría → Interventoría;
       Movistar → propietario; Sencia → concesionario; representante legal
       de la empresa que inspeccionó → profesional técnico. Si un director
@@ -208,3 +211,9 @@ los firmantes "oficiales" son los mismos directores para todo el lote
 - [x] 2026-09-22: pusheados a `origin/master` los 3 commits que ya estaban
       listos (respaldo local, marca de agua, encabezado versionado) más el
       cableado del módulo nativo.
+- [x] 2026-09-29: pusheados a `origin/master` en `app-vecindad` →
+      `7e1705b` (UUID de la madre en cada zona) y `cf2dc4b` (elegir acta
+      madre). En `backend-vecindad` → `f56ce50` (link de firma por lote +
+      zona ligada por UUID) y `20183dc` (`GET /api/lotes/madres`).
+- [ ] Confirmar que el deploy del backend corrió bien (trae la migración
+      `migrate_2026-09-firma-lote.sql`) antes de sacar el build del app.
