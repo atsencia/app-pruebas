@@ -110,19 +110,35 @@ function esBase64Valido(str) {
  * Descarga una URL remota al cache local para poder subirla por FTP.
  * Util cuando se edita un acta y las fotos/firmas ya tienen URL http.
  */
+// Al re-subir un acta editada, lo que ya estaba en el servidor se baja para
+// volver a subirlo. Antes un fallo de red devolvía null y el archivo se
+// saltaba en silencio: el acta quedaba subida SIN esa foto/video (pasó con
+// un "unexpected end of stream" contra prod). Ahora se reintenta y, si igual
+// falla, se lanza el error: la subida falla entera y la cola la reintenta
+// después, en vez de perder el archivo.
+const INTENTOS_DESCARGA = 3;
+
 async function descargarURLATemp(url, nombreArchivo) {
   const uri = `${FileSystem.cacheDirectory}${nombreArchivo}`;
-  try {
-    const result = await FileSystem.downloadAsync(url, uri);
-    if (result.status !== 200) {
-      console.warn(`⚠️ No se pudo descargar ${url} — status ${result.status}`);
-      return null;
+  let motivo = '';
+  for (let i = 1; i <= INTENTOS_DESCARGA; i++) {
+    try {
+      const result = await FileSystem.downloadAsync(url, uri);
+      if (result.status === 200) return uri;
+      // 404: el archivo ya no está en el servidor, no hay nada que conservar;
+      // fallar acá dejaría el acta sin poder re-subirse nunca.
+      if (result.status === 404) {
+        console.warn(`⚠️ ${url} no existe en el servidor (404), se omite`);
+        return null;
+      }
+      motivo = `status ${result.status}`;
+    } catch (e) {
+      motivo = e.message;
     }
-    return uri;
-  } catch (e) {
-    console.warn(`⚠️ Error descargando ${url}:`, e.message);
-    return null;
+    console.warn(`⚠️ Intento ${i}/${INTENTOS_DESCARGA} descargando ${url}: ${motivo}`);
+    if (i < INTENTOS_DESCARGA) await new Promise(r => setTimeout(r, 2000 * i));
   }
+  throw new Error(`No se pudo bajar ${nombreArchivo.replace(/^_tmp_/, '')} del servidor (${motivo}). Se reintentará la subida.`);
 }
 
 async function firmaAUriLocal(firmaRaw, nombreArchivo) {
