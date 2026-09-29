@@ -192,9 +192,11 @@ los firmantes "oficiales" son los mismos directores para todo el lote
       el encabezado de la madre elegida y la deja como lote del teléfono
       (`usarActaMadre`). La zona nueva toma el tipo de acta de su madre y el
       formulario muestra arriba "Relacionada con Acta madre N° …".
-- [ ] Probar "Elegir acta madre" en el app (emulador o teléfono) contra el
-      backend local: elegir la madre de seguimiento de prueba (25), crear
-      una zona y ver que llegue ligada a la 25.
+- [x] Probado "Elegir acta madre" en el emulador contra prod (2026-09-29):
+      madre de inicio N° 3 + 2 zonas; luego madre de seguimiento N° 6 (la
+      más reciente), se eligió de nuevo la N° 3 y la zona siguiente cayó en
+      la N° 3 (3 zonas) y no en la N° 6 (0) → la liga por UUID funciona.
+      Registros de prueba "PRUEBA ... CLAUDE" pendientes de borrar en prod.
 - [ ] Los cambios del app (UUID de la madre y "Elegir acta madre")
       necesitan un build nuevo. Antes de repartirlo, el backend tiene que
       estar desplegado con `GET /api/lotes/madres` (backend `20183dc`); si
