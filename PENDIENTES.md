@@ -79,12 +79,60 @@ los links viejos que no se usaron.
       reemplaza la anterior. ¿Continuar?". Permitir cambiar el correo.
 - [ ] (Opcional) En el detalle del acta, mostrar las firmas anteriores
       (fecha y nombre) a partir de `firma_tokens`.
-- [ ] Por decidir: ¿se permite en `confirmada_interventoria`, o solo antes?
-      Y si la firma cambia después de mandar el acta al Excel (Power
-      Automate), ¿hay que volver a mandarla?
+- [x] Excel: no hace falta nada. Se mandan todas las actas (menos las que
+      siguen subiendo), no solo las cerradas, y cualquier cambio (firma,
+      correo, estado) sube `actualizado_en` y la fila se reenvía. El "Link
+      al acta" es `acta.html?id=<uuid>` y no cambia al cerrar: antes muestra
+      los datos vivos y después la copia congelada `datos.cerrado.json`.
 - [ ] Probar: firmar → pedir de nuevo → el acta sigue con la vieja → firmar
       el link nuevo → queda la nueva. El link viejo sin usar ya no sirve, y
       con el acta cerrada no deja pedirla.
+
+### Qué firma se puede pedir en cada estado (decidido el 2026-09-28)
+
+- Propietario, concesionario y profesional firman **antes** de que
+  Interventoría revise el acta. Interventoría da el check sobre un acta que
+  ya tiene esas firmas.
+- Con el acta `confirmada_interventoria`, la única firma que se puede pedir
+  es la del delegado de Interventoría. Cuando él firma, Social cierra.
+- Después de la firma del delegado de Interventoría el acta **no se puede
+  editar**: ni otra firma, ni pedirle de nuevo la suya, ni re-subirla desde
+  el app.
+
+- Concesionario y profesional: firma obligatoria. Propietario: la firma
+  **no** es obligatoria, pero sus datos personales sí (nombre, cédula y
+  celular; por confirmar si el correo también).
+- Propietario: nombre, cédula, celular y correo, todos obligatorios.
+- ~~El bloqueo va al enviar a Interventoría~~ Cambiado el mismo día:
+  Interventoría puede revisar y confirmar aunque falten firmas. Con el acta
+  confirmada, Social pide las que falten y, cuando están todas, le pide la
+  firma al delegado de Interventoría. Lo que se bloquea es ese link.
+
+Implementado el 2026-09-28 en `backend-vecindad`:
+
+- [x] `motivoFirmaNoPermitida` (`RevisionController.js`), usado por
+      `enviarLinkFirma`, `vistaFirma` y `cargarFirma`: propietario,
+      concesionario y profesional solo en `recibida`, `devuelta_gestor` y
+      `devuelta_interventoria` y `confirmada_interventoria`; interventoría
+      solo en `confirmada_interventoria`; con `inter_firma` puesta, nada más.
+- [x] El link (y la firma) de Interventoría exige
+      (`faltantesParaFirmaInterventoria`) firmas de concesionario y
+      profesional y nombre, cédula, celular y correo del propietario (mira la
+      base y el `datos.json`, porque las firmas del app viven ahí). `cerrar`
+      exige la firma de interventoría.
+- [x] Celular del propietario: si el app no lo trajo, Social lo carga en el
+      modal "Enviar firma" eligiendo Propietario (se guarda en
+      `prop_telefono` al generar el link, igual que el correo).
+- [x] El app ya no deja editar fuera de `recibida`/`devuelta_gestor`
+      (`Registrodetailsheet.tsx`), así que no hay re-subida después de la
+      firma de Interventoría.
+- [x] Panel: "Enviar firma" con el acta en Social o confirmada (la opción
+      Interventoría solo con el acta confirmada); "Cerrar acta" desactivado
+      hasta que Interventoría firme.
+- [ ] Probarlo contra una base real (solo se probaron las reglas aisladas).
+- [ ] Actas viejas: las que ya tienen `inter_firma` del flujo anterior
+      quedan bloqueadas para otras firmas. ¿Las actas madre también deben
+      exigir estas firmas y datos?
 
 ## Push
 
