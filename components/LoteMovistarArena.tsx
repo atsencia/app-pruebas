@@ -12,6 +12,7 @@ const C = Colors.light;
 
 interface LoteActivo {
   codigoProyecto: string;
+  actaMadreEtiqueta?: string;   // "Acta madre N° 24 · inicio · Diagonal…"
   cabecera: Record<string, any>;
   iniciadoEn: string;
   totalZonas: number;
@@ -23,11 +24,23 @@ interface Props {
   onNuevaActaInicial: () => void;
   onNuevaZona: () => void;
   onCerrarLote: () => void;
+  onElegirActaMadre: () => void;
 }
 
 export default function LoteMovistarArena({
-  loteActivo, onNuevaActaInicial, onNuevaZona, onCerrarLote,
+  loteActivo, onNuevaActaInicial, onNuevaZona, onCerrarLote, onElegirActaMadre,
 }: Props) {
+  // Para sumar zonas a un acta madre que ya subió otro gestor (o este mismo).
+  const botonElegir = (
+    <Pressable
+      style={({ pressed }) => [styles.btn, pressed && styles.itemPressed]}
+      onPress={onElegirActaMadre}
+    >
+      <Feather name="list" size={13} color={C.primary} />
+      <Text style={styles.btnText}>{loteActivo ? 'Cambiar acta madre' : 'Elegir acta madre'}</Text>
+    </Pressable>
+  );
+
   const [abierto, setAbierto] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
 
@@ -72,7 +85,7 @@ export default function LoteMovistarArena({
             <>
               <View style={styles.resumenCard}>
                 <Text style={styles.resumenDireccion} numberOfLines={2}>
-                  {(loteActivo.cabecera.direccion || '').trim() || 'Sin dirección'}
+                  {loteActivo.actaMadreEtiqueta || (loteActivo.cabecera.direccion || '').trim() || 'Sin dirección'}
                 </Text>
                 <Text style={styles.resumenMeta}>
                   Encabezado V{loteActivo.versionActiva ?? 1} · {loteActivo.totalZonas} zona{loteActivo.totalZonas === 1 ? '' : 's'} subida{loteActivo.totalZonas === 1 ? '' : 's'}
@@ -86,6 +99,8 @@ export default function LoteMovistarArena({
                 <Feather name="plus" size={14} color="#fff" />
                 <Text style={styles.btnPrimaryText}>Nueva Zona</Text>
               </Pressable>
+
+              {botonElegir}
 
               <Pressable
                 style={({ pressed }) => [styles.btn, pressed && styles.itemPressed]}
@@ -116,6 +131,8 @@ export default function LoteMovistarArena({
                 <Feather name="plus" size={14} color="#fff" />
                 <Text style={styles.btnPrimaryText}>Nueva Acta Inicial</Text>
               </Pressable>
+
+              {botonElegir}
             </>
           )}
         </View>

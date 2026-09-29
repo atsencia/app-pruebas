@@ -185,9 +185,16 @@ los firmantes "oficiales" son los mismos directores para todo el lote
       tocaron las de seguimiento; interventoría dejó fuera la zona sin
       confirmar y la firmó después con un link nuevo; las observaciones
       muestran el personal en sitio y los recuadros a los directores.
-- [ ] El celular guarda UN lote activo: no se puede ir alternando entre el
-      lote de inicio y el de seguimiento en el mismo teléfono (iniciar una
-      madre nueva reemplaza el lote). ¿Hace falta?
+- [x] Un gestor no alterna entre lotes (decidido), pero varios gestores
+      trabajan el mismo lote: antes el lote solo existía en el celular que
+      subió la madre. Ahora en la sección Movistar Arena hay "Elegir acta
+      madre" (`ElegirActaMadreModal`, `GET /api/lotes/madres?codigo=`): baja
+      el encabezado de la madre elegida y la deja como lote del teléfono
+      (`usarActaMadre`). La zona nueva toma el tipo de acta de su madre y el
+      formulario muestra arriba "Relacionada con Acta madre N° …".
+- [ ] Probar "Elegir acta madre" en el app (emulador o teléfono) contra el
+      backend local: elegir la madre de seguimiento de prueba (25), crear
+      una zona y ver que llegue ligada a la 25.
 - [ ] Los cambios del app (UUID de la madre) necesitan un build nuevo.
 - [x] Qué recuadro llena cada director: interventoría → Interventoría;
       Movistar → propietario; Sencia → concesionario; representante legal

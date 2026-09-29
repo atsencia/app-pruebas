@@ -149,10 +149,44 @@ export const versionesDeLote = (lote) => {
   return [{ numero: 1, cabecera: lote.cabecera, creadoEn: lote.iniciadoEn }];
 };
 
+// Valor vacío de los campos de la cabecera que no son texto.
+const CAMPOS_NO_TEXTO = { estaOcupada: false, tieneGaraje: false, latitud: null, longitud: null };
+
+// Cabecera del lote a partir del formulario de un acta ya subida (el
+// `acta` de GET /api/registros/:uuid/acta). Mismo mapeo que usa form.tsx
+// al cargar un acta para editarla.
+export const cabeceraDesdeActa = (f) => {
+  const desdeActa = {
+    propCorreo:  f.firmaPropietario?.correo,
+    interNombre: f.firmaInterventoria?.nombre,
+    interCargo:  f.firmaInterventoria?.cargo,
+    interCorreo: f.firmaInterventoria?.correo,
+    latitud:     f.georef?.latitud  ?? f.latitud,
+    longitud:    f.georef?.longitud ?? f.longitud,
+  };
+  const cabecera = {};
+  CAMPOS_CABECERA_LOTE.forEach(k => {
+    const v = k in desdeActa ? desdeActa[k] : f[k];
+    cabecera[k] = v ?? (k in CAMPOS_NO_TEXTO ? CAMPOS_NO_TEXTO[k] : '');
+  });
+  return cabecera;
+};
+
+const TIPOS_ACTA = { inicio: 'inicio', seguimiento: 'seguimiento', cierre: 'cierre' };
+
+// "Acta madre N° 24 · inicio · Diagonal 61C…" (sin número si aún no lo tiene).
+export const etiquetaActaMadre = (acta, tipoActa, direccion) =>
+  [
+    acta ? `Acta madre N° ${acta}` : 'Acta madre',
+    TIPOS_ACTA[tipoActa],
+    (direccion ?? '').trim(),
+  ].filter(Boolean).join(' · ');
+
 export const useLoteMovistarArena = create(
   persist(
     (set, get) => ({
-      // { codigoProyecto, actaMadreUuid, cabecera, iniciadoEn, totalZonas, versiones, versionActiva } | null
+      // { codigoProyecto, actaMadreUuid, actaMadreEtiqueta, tipoActa, cabecera,
+      //   iniciadoEn, totalZonas, versiones, versionActiva } | null
       // `cabecera` siempre es la de la versión activa.
       loteActivo: null,
 
@@ -168,6 +202,28 @@ export const useLoteMovistarArena = create(
           loteActivo: {
             codigoProyecto: formData.codigoProyecto || CODIGO_PROYECTO_MOVISTAR,
             actaMadreUuid,
+            // El número de acta lo pone el servidor: aquí todavía no se sabe.
+            actaMadreEtiqueta: etiquetaActaMadre(null, formData.tipoActa, formData.direccion),
+            tipoActa: formData.tipoActa || '',
+            cabecera,
+            iniciadoEn: ahora,
+            totalZonas: 0,
+            versiones: [{ numero: 1, cabecera, creadoEn: ahora }],
+            versionActiva: 1,
+          },
+        });
+      },
+
+      // Toma como lote un acta madre ya subida (por este u otro gestor): el
+      // teléfono baja su cabecera y las zonas nuevas quedan ligadas a ella.
+      usarActaMadre: ({ codigoProyecto, uuid, acta, tipoActa, direccion, cabecera }) => {
+        const ahora = new Date().toISOString();
+        set({
+          loteActivo: {
+            codigoProyecto,
+            actaMadreUuid: uuid,
+            actaMadreEtiqueta: etiquetaActaMadre(acta, tipoActa, direccion),
+            tipoActa: tipoActa || '',
             cabecera,
             iniciadoEn: ahora,
             totalZonas: 0,

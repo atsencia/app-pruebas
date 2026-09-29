@@ -30,7 +30,8 @@ import { useUploadQueue } from '@/hooks/useUploadQueue';
 import { generarIDUnico } from '@/services/FtpuploadServices';
 import QueueStatusBar from '@/components/QueueStatusBar';
 import LoteMovistarArena from '@/components/LoteMovistarArena';
-import { useLoteMovistarArena, CODIGO_PROYECTO_MOVISTAR, versionesDeLote } from '@/store/zustand-state';
+import { useLoteMovistarArena, CODIGO_PROYECTO_MOVISTAR, versionesDeLote, cabeceraDesdeActa } from '@/store/zustand-state';
+import ElegirActaMadreModal, { ActaMadre } from '@/components/ElegirActaMadreModal';
 import EncabezadoInicialModal, { fechaCorta } from '@/components/EncabezadoInicialModal';
 import * as DocumentPicker from 'expo-document-picker';
 import { useBorradoresActions } from '../hooks/useBorradoresActions';
@@ -328,9 +329,10 @@ export default function FormScreen() {
 
       const { guardar } = useBorradoresActions();
       const { crearDesdeForm } = usePredioTemplates();
-      const { loteActivo, iniciarLote, registrarZonaSubida, cerrarLote, agregarVersion, usarVersion } = useLoteMovistarArena();
+      const { loteActivo, iniciarLote, registrarZonaSubida, cerrarLote, agregarVersion, usarVersion, usarActaMadre } = useLoteMovistarArena();
 
       const [modalEncabezadoVisible, setModalEncabezadoVisible] = useState(false);
+      const [modalMadreVisible,     setModalMadreVisible]      = useState(false);
       const [modalBorradorVisible, setModalBorradorVisible]   = useState(false);
       const [modalTemplateVisible, setModalTemplateVisible]   = useState(false);
       const [borradorActivoId,     setBorradorActivoId]       = useState<string | null>(null);
@@ -518,10 +520,37 @@ export default function FormScreen() {
       // Lotes iniciados antes de guardar el UUID no lo tienen: el servidor
       // usa entonces la madre más reciente del proyecto.
       setField('actaMadreUuid', loteActivo.actaMadreUuid ?? null);
+      // Mismo tipo que su madre (inicio/seguimiento/cierre); se puede cambiar.
+      if (loteActivo.tipoActa) setField('tipoActa', loteActivo.tipoActa);
       aplicarCabecera(loteActivo.cabecera, loteActivo.versionActiva ?? 1, true);
       closeSidebar();
       setTimeout(() => router.replace('/form'), 240);
     });
+  };
+
+  // Elegir un acta madre ya subida (por cualquier gestor): baja su
+  // encabezado y la deja como lote de este teléfono.
+  const elegirActaMadre = async (madre: ActaMadre) => {
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/registros/${encodeURIComponent(madre.uuid)}/acta`,
+        { headers: { "Authorization": `Bearer ${user?.token}` } }
+      );
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      usarActaMadre({
+        codigoProyecto: data.acta?.codigoProyecto || CODIGO_PROYECTO_MOVISTAR,
+        uuid:      madre.uuid,
+        acta:      madre.acta,
+        tipoActa:  madre.tipo_acta ?? '',
+        direccion: madre.direccion,
+        cabecera:  cabeceraDesdeActa(data.acta ?? {}),
+      });
+      setModalMadreVisible(false);
+      Alert.alert('Acta madre elegida', 'Las zonas nuevas que subas quedan relacionadas con esta acta madre.');
+    } catch {
+      Alert.alert('Error', 'No se pudo traer la información del acta madre. Revisa la conexión.');
+    }
   };
 
   // Popup "Verificar información inicial del acta"
@@ -840,6 +869,21 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         onAplicar={handleAplicarTemplate}
         onGuardarActual={() => setModalTemplateVisible(true)}
       /> */}
+        {/* Zona del lote: con qué acta madre queda relacionada. */}
+        {esZona && !!form.actaMadreUuid && (
+          <View style={styles.madreBanner}>
+            <Feather name="link" size={14} color={C.primary} />
+            <Text style={styles.madreBannerTxt} numberOfLines={2}>
+              Relacionada con{' '}
+              <Text style={styles.madreBannerFuerte}>
+                {loteActivo?.actaMadreUuid === form.actaMadreUuid && loteActivo?.actaMadreEtiqueta
+                  ? loteActivo.actaMadreEtiqueta
+                  : `el acta madre ${form.actaMadreUuid}`}
+              </Text>
+            </Text>
+          </View>
+        )}
+
         {encabezadoColapsado ? (
           <View style={styles.encabezadoCard}>
             <View style={styles.encabezadoHeader}>
@@ -1565,6 +1609,15 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           onNuevaActaInicial={nuevaActaInicialMovistar}
           onNuevaZona={nuevaZonaDelLote}
           onCerrarLote={cerrarLoteMovistar}
+          onElegirActaMadre={() => setModalMadreVisible(true)}
+        />
+        <ElegirActaMadreModal
+          visible={modalMadreVisible}
+          codigoProyecto={loteActivo?.codigoProyecto || CODIGO_PROYECTO_MOVISTAR}
+          token={user?.token}
+          uuidActual={loteActivo?.actaMadreUuid}
+          onClose={() => setModalMadreVisible(false)}
+          onElegir={elegirActaMadre}
         />
 
         <View style={styles.sidebarDivider} />
@@ -1774,6 +1827,13 @@ const styles = StyleSheet.create({
   encabezadoTitulo:     { fontSize: 15, fontFamily: "Inter_700Bold", color: C.text },
   encabezadoSub:        { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 2 },
   encabezadoVersionTxt: { fontFamily: "Inter_700Bold", color: C.primary },
+  madreBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: C.primary + "12", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 9, marginBottom: 12,
+  },
+  madreBannerTxt:    { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.text },
+  madreBannerFuerte: { fontFamily: "Inter_600SemiBold", color: C.primary },
   encabezadoResumen:    { fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
   encabezadoBtn:        { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     backgroundColor: C.primary, paddingVertical: 13, borderRadius: 13 },
