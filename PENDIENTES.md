@@ -119,7 +119,7 @@ Implementado el 2026-09-28 en `backend-vecindad`:
       (`faltantesParaFirmaInterventoria`) firmas de concesionario y
       profesional y nombre, cédula, celular y correo del propietario (mira la
       base y el `datos.json`, porque las firmas del app viven ahí). `cerrar`
-      exige la firma de interventoría.
+      exige la firma de interventoría y que no falte ninguna de las demás.
 - [x] Celular del propietario: si el app no lo trajo, Social lo carga en el
       modal "Enviar firma" eligiendo Propietario (se guarda en
       `prop_telefono` al generar el link, igual que el correo).
@@ -129,10 +129,13 @@ Implementado el 2026-09-28 en `backend-vecindad`:
 - [x] Panel: "Enviar firma" con el acta en Social o confirmada (la opción
       Interventoría solo con el acta confirmada); "Cerrar acta" desactivado
       hasta que Interventoría firme.
-- [ ] Probarlo contra una base real (solo se probaron las reglas aisladas).
-- [ ] Actas viejas: las que ya tienen `inter_firma` del flujo anterior
-      quedan bloqueadas para otras firmas. ¿Las actas madre también deben
-      exigir estas firmas y datos?
+- [x] Actas viejas que Interventoría firmó sin estar completas (decidido:
+      opción b): con el acta confirmada, Social puede pedir las firmas que
+      falten, y no se cierra hasta tenerlas. Cuando está completa, nada más.
+- [x] Probado contra el API y la base locales (2026-09-28): flujo normal
+      con el acta madre (16) y acta vieja firmada (17), incluido firmar por
+      link y cerrar.
+- [ ] ¿Las actas madre también deben exigir estas firmas y datos? Hoy sí.
 
 ## Push
 
