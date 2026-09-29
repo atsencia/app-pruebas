@@ -34,10 +34,20 @@ function obtenerLlavePrivada() {
   return Buffer.from(SFTP_CONFIG.privateKeyB64, 'base64').toString('utf8');
 }
 
+// fetch en React Native no tiene timeout: si el servidor acepta la conexión
+// y no responde (se vio colgado en el handshake TLS), la promesa no resuelve
+// nunca y el ítem quedaba en "Subiendo" para siempre aunque el SFTP ya
+// hubiera terminado. Con el timeout vuelve como no confirmado y el worker lo
+// deja en VERIFICANDO para re-consultar en el próximo tick.
+const TIMEOUT_VALIDAR_MS = 20000;
+
 export async function validarSubidaBackend(carpeta, token) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_VALIDAR_MS);
   try {
     const res = await fetch(`${API_BASE}/api/registros/${encodeURIComponent(carpeta)}/validar`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -45,7 +55,12 @@ export async function validarSubidaBackend(carpeta, token) {
     }
     return data; // { ok, completo, done, total, subidos, faltantes, archivos }
   } catch (e) {
-    return { ok: false, completo: false, error: e.message };
+    const error = controller.signal.aborted
+      ? 'El servidor no respondió a tiempo al confirmar la carga.'
+      : e.message;
+    return { ok: false, completo: false, error };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
