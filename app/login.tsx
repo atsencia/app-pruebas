@@ -54,7 +54,7 @@ export default function LoginScreen() {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.message || "Credenciales incorrectas");
+      throw new Error(data.error || data.message || "Credenciales incorrectas");
     }
 
     const data = await response.json();
