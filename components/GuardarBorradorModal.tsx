@@ -52,7 +52,7 @@ export default function GuardarBorradorModal({ visible, nombreSugerido, onGuarda
             style={styles.input}
             value={nombre}
             onChangeText={setNombre}
-            placeholder="Ej: Movistar Arena - Apto 301"
+            placeholder="Ej: Predio Coliseo - Apto 301"
             placeholderTextColor={C.textSecondary}
             autoFocus
             maxLength={80}

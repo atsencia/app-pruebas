@@ -1,6 +1,6 @@
 // components/EncabezadoInicialModal.tsx
 // Popup "Verificar información inicial del acta" de las actas Por Zona de
-// Movistar Arena. Muestra el encabezado (cabecera) que se reutiliza en todas
+// Predio Coliseo. Muestra el encabezado (cabecera) que se reutiliza en todas
 // las zonas y permite editarlo con el lápiz. Editar NUNCA modifica una versión
 // existente: crea una nueva (V2, V3…) y las actas ya enviadas conservan la
 // versión con la que se llenaron.

@@ -126,7 +126,7 @@ export const usePredioTemplates = create(
 );
 
 // ─────────────────────────────────────────────
-// LOTE MOVISTAR ARENA
+// LOTE PREDIO COLISEO
 // (cabecera compartida entre la acta madre y sus zonas)
 // ─────────────────────────────────────────────
 

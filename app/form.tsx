@@ -469,7 +469,7 @@ export default function FormScreen() {
   };
 
   // ── Tipo de registro según la entrada del sidebar ─────────────────────
-  // Ya no hay selector: "Nueva Acta" abre una acta regular, y Movistar Arena →
+  // Ya no hay selector: "Nueva Acta" abre una acta regular, y Predio Coliseo →
   // "Nueva Acta Inicial" / "Nueva Zona" abren esos tipos. Como cambiar de tipo
   // vacía el formulario, si ya hay algo escrito se pide confirmación.
   const formTieneDatos = () =>
@@ -497,7 +497,7 @@ export default function FormScreen() {
     setTimeout(() => router.replace('/form'), 240);
   });
 
-  // ── Lote Movistar Arena ─────────────────────
+  // ── Lote Predio Coliseo ─────────────────────
   const nuevaActaInicialMovistar = () => {
     const empezar = () => conConfirmacion(() => {
       clearForm();
@@ -838,8 +838,8 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
         <View style={styles.topBarCenter}>
           <Text style={styles.topBarTitle}>
             {isEditing ? "Editar Registro"
-              : esMadre ? "Acta Inicial · Movistar Arena"
-              : esZona  ? "Nueva Zona · Movistar Arena"
+              : esMadre ? "Acta Inicial · Predio Coliseo"
+              : esZona  ? "Nueva Zona · Predio Coliseo"
               : "Nueva Acta"}
           </Text>
           <Text style={styles.topBarSub}>Operador: {user?.username}</Text>
@@ -862,7 +862,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
       >
         {/* El tipo de registro (regular / acta inicial / por zona) ya no se elige
             aquí: lo define la entrada del sidebar con la que se abrió el formulario
-            (Nueva Acta, Movistar Arena → Nueva Acta Inicial / Nueva Zona). */}
+            (Nueva Acta, Predio Coliseo → Nueva Acta Inicial / Nueva Zona). */}
     <View style={styles.tipoActaCard}>
       <Text style={styles.tipoActaLabel}>TIPO DE ACTA</Text>
       <View style={styles.tipoActaRow}>
@@ -947,7 +947,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
           filledLabel="Datos completos"
           emptyLabel="Faltan datos"
         >
-          {/* Bloqueo visual cuando es edición desde Actas Movistar */}
+          {/* Bloqueo visual cuando es edición desde Actas Predio Coliseo */}
           {isEditing && (
             <View style={styles.lockedBanner}>
               <Feather name="lock" size={13} color="#7C3AED" />
@@ -1636,7 +1636,7 @@ const handleAplicarTemplate = (campos: Record<string, any>) => {
 
         <View style={styles.sidebarDivider} />
 
-        {/* ★ Movistar Arena — lote de actas con cabecera compartida ★ */}
+        {/* ★ Predio Coliseo — lote de actas con cabecera compartida ★ */}
         <LoteMovistarArena
           loteActivo={loteActivo}
           onNuevaActaInicial={nuevaActaInicialMovistar}

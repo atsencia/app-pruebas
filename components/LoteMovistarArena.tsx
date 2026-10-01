@@ -1,5 +1,5 @@
 // components/LoteMovistarArena.tsx
-// Apartado del sidebar para subir actas del proyecto Movistar Arena en lote:
+// Apartado del sidebar para subir actas del proyecto Predio Coliseo en lote:
 // la acta inicial define la cabecera (dirección, servicios, usos, etc.) y
 // las zonas siguientes la reciben precargada (editable) al abrirse.
 
@@ -62,7 +62,7 @@ export default function LoteMovistarArena({
 
         <View style={styles.headerText}>
           <Text style={[styles.headerLabel, abierto && { color: C.primary }]}>
-            Movistar Arena
+            Predio Coliseo
           </Text>
           {loteActivo && (
             <Text style={styles.headerDesc}>

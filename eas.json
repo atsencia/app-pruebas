@@ -1,4 +1,7 @@
 {
+  "cli": {
+    "appVersionSource": "remote"
+  },
   "build": {
     "preview": {
       "android": {
@@ -29,7 +32,8 @@
     },
     "production": {
       "channel": "production",
-      "environment": "production"
+      "environment": "production",
+      "autoIncrement": true
     }
   }
 }
